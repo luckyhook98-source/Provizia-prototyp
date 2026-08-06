@@ -98,6 +98,11 @@ label{display:block;font-size:13px;color:var(--dim);margin-bottom:5px}
 .stav{display:flex;justify-content:flex-start;align-items:center;gap:7px;
   padding:11px 16px 9px;font-size:13.5px;font-weight:600;color:var(--dim);
   letter-spacing:-.01em}
+/* v režime celej obrazovky netreba hore ďalšiu medzeru — rieši ju už telo stránky */
+@media(display-mode:standalone){
+  body{padding-top:max(4px,env(safe-area-inset-top,0px))}
+  .telefon{border-top-left-radius:14px;border-top-right-radius:14px}
+}
 .stav .cas{color:var(--text)}
 
 /* ---- profil ---- */
@@ -283,10 +288,16 @@ button[data-tip]{cursor:pointer}
 .attr[data-tip]:hover{background:var(--panel2)}
 
 /* ---- mobil ---- */
-body{padding-left:max(8px,env(safe-area-inset-left));
- padding-right:max(8px,env(safe-area-inset-right));
- padding-bottom:max(18px,env(safe-area-inset-bottom));
+/* Pridané na plochu telefónu beží hra cez celý displej — obsah preto musí
+   uhnúť ostrovčeku a domovskej čiarke, inak sa schová pod ne. */
+body{padding-top:max(8px,env(safe-area-inset-top,0px));
+ padding-left:max(8px,env(safe-area-inset-left,0px));
+ padding-right:max(8px,env(safe-area-inset-right,0px));
+ padding-bottom:max(18px,env(safe-area-inset-bottom,0px));
+ min-height:100dvh;
  -webkit-text-size-adjust:100%;overscroll-behavior-y:contain}
+/* Bublina s nápovedou sa tiež nesmie schovať pod ostrovček. */
+.tip{margin-top:env(safe-area-inset-top,0px)}
 @media(max-width:400px){
  .chipy{gap:5px}
  .chip b{font-size:14px} .chip i{font-size:9px}
@@ -1869,11 +1880,11 @@ const FAZY=["RÁNO · Kancelária","POOBEDIE · Terén","VEČER · Rozvoj"];
 let S={}, CRM=null, M=null, EX=null, SC=null;
 
 const VERZIA=3;                 /* verzia formátu uloženej pozície */
-const HRA="0.8.7";              /* verzia hry — zobrazuje sa v rozhraní */
+const HRA="0.8.8";              /* verzia hry — zobrazuje sa v rozhraní */
 /* Otlačok konkrétneho zostavenia. Dopĺňa sa pri skladaní súboru, takže dve
    rôzne zostavenia tej istej verzie sa dajú od seba rozoznať. Keď tester hlási
    chybu, stačí porovnať tento reťazec. */
-const BUILD="2026-08-06-20b0a5";
+const BUILD="2026-08-06-f9c1e1";
 function prazdnyStav(){return {
  v:VERZIA, scr:"phone", view:"domov",
  meno:"", priez:"", rok:1996, pohl:"m", hair:0, beard:0, skin:0, hairCol:0, okuliare:false,
@@ -4025,6 +4036,9 @@ const tipZnak='<span class="tipik">ⓘ</span>';
    hra mu ukáže všetko, čo medzitým pribudlo.                              */
 
 const NOVINKY=[
+ {v:"0.8.8", nm:"Oprava zobrazenia na telefóne", body:[
+  "Pri pridaní na plochu telefónu už obsah nelezie pod ostrovček ani domovskú čiarku.",
+  "Ošetrené sú všetky štyri okraje displeja aj režim celej obrazovky."]},
  {v:"0.8.7", nm:"Ukladanie na webe", body:[
   "Hra sa teraz ukladá aj mimo prostredia Claude — na webovej adrese sa postup drží v prehliadači.",
   "V nastaveniach vidíš, kam sa uložená hra ukladá."]},
