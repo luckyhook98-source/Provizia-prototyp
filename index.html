@@ -1880,11 +1880,11 @@ const FAZY=["RÁNO · Kancelária","POOBEDIE · Terén","VEČER · Rozvoj"];
 let S={}, CRM=null, M=null, EX=null, SC=null;
 
 const VERZIA=3;                 /* verzia formátu uloženej pozície */
-const HRA="0.8.8";              /* verzia hry — zobrazuje sa v rozhraní */
+const HRA="0.9.0";              /* verzia hry — zobrazuje sa v rozhraní */
 /* Otlačok konkrétneho zostavenia. Dopĺňa sa pri skladaní súboru, takže dve
    rôzne zostavenia tej istej verzie sa dajú od seba rozoznať. Keď tester hlási
    chybu, stačí porovnať tento reťazec. */
-const BUILD="2026-08-06-f9c1e1";
+const BUILD="2026-08-06-71ea62";
 function prazdnyStav(){return {
  v:VERZIA, scr:"phone", view:"domov",
  meno:"", priez:"", rok:1996, pohl:"m", hair:0, beard:0, skin:0, hairCol:0, okuliare:false,
@@ -2475,6 +2475,160 @@ function porovnajZostavenie(hra,build){
  return build?2:0;                    /* 2 = tá istá verzia, iné zostavenie */
 }
 
+/* ===================== ZÁLOHA NA ÚČET =====================
+   Prihlásenie cez Google a uloženie postupu do cloudu, aby ho hráč mal
+   na každom zariadení bez prenosového kódu.
+
+   Beží celé v prehliadači — žiadny vlastný server. Prihlásenie aj úložisko
+   vybavuje Supabase; hra sa s ním rozpráva obyčajnými požiadavkami.
+
+   Kým nie sú vyplnené údaje nižšie, funkcia je vypnutá a hra beží ako doteraz.
+   Návod na vyplnenie je v priloženom README.                                 */
+
+const CLOUD={
+ url:"",                 /* napr. https://xxxxxxxx.supabase.co */
+ anon:"",                /* verejný kľúč projektu (anon public) */
+ tabulka:"savy"
+};
+const CLOUD_KLUC="provizia:cloud";
+let CLOUD_RELACIA=null;
+
+const cloudNastavene=function(){ return !!(CLOUD.url&&CLOUD.anon) };
+
+/* ---------- prihlásenie ---------- */
+function cloudAdresaNavratu(){
+ try{ return location.origin+location.pathname }catch(e){ return "" }
+}
+function cloudPrihlas(){
+ if(!cloudNastavene())return false;
+ const cesta=CLOUD.url+"/auth/v1/authorize?provider=google&redirect_to="+
+   encodeURIComponent(cloudAdresaNavratu());
+ try{ location.href=cesta }catch(e){ return false }
+ return true;
+}
+/* Po návrate od Googlu sú tokeny v adrese za mriežkou. */
+function rozoberFragment(hash){
+ const von={};
+ String(hash||"").replace(/^#/,"").split("&").forEach(function(p){
+  if(!p)return;
+  const i=p.indexOf("=");
+  if(i<0)return;
+  von[decodeURIComponent(p.slice(0,i))]=decodeURIComponent(p.slice(i+1).replace(/\+/g," "));
+ });
+ return von;
+}
+/* Z tokenu sa dá prečítať, komu patrí — bez volania servera. */
+function citajToken(t){
+ try{
+  const c=String(t).split(".")[1];
+  if(!c)return null;
+  const zaklad=c.replace(/-/g,"+").replace(/_/g,"/");
+  const surove=(typeof atob==="function")?atob(zaklad)
+    :Buffer.from(zaklad,"base64").toString("binary");
+  let json;
+  try{ json=decodeURIComponent(escape(surove)) }catch(e){ json=surove }
+  const d=JSON.parse(json);
+  if(!d||!d.sub)return null;
+  return {id:d.sub, email:(d.email||(d.user_metadata&&d.user_metadata.email)||""),
+          platnyDo:(d.exp||0)*1000};
+ }catch(e){ return null }
+}
+function cloudUlozRelaciu(r){
+ CLOUD_RELACIA=r;
+ try{ localStorage.setItem(CLOUD_KLUC,JSON.stringify(r)) }catch(e){}
+}
+function cloudRelacia(){
+ if(CLOUD_RELACIA)return CLOUD_RELACIA;
+ try{ const s=localStorage.getItem(CLOUD_KLUC); if(s)CLOUD_RELACIA=JSON.parse(s) }catch(e){}
+ return CLOUD_RELACIA;
+}
+function cloudOdhlas(){
+ CLOUD_RELACIA=null;
+ try{ localStorage.removeItem(CLOUD_KLUC) }catch(e){}
+}
+const cloudPrihlaseny=function(){
+ const r=cloudRelacia();
+ return !!(r&&r.token&&r.id);
+};
+const cloudEmail=function(){ const r=cloudRelacia(); return (r&&r.email)||"" };
+
+/* Spracuje návrat z prihlásenia. Vracia true, ak sa hráč práve prihlásil. */
+function cloudSpracujNavrat(hashText){
+ const h=(hashText!==undefined)?hashText
+   :((typeof location!=="undefined"&&location.hash)?location.hash:"");
+ const p=rozoberFragment(h);
+ if(!p.access_token)return false;
+ const u=citajToken(p.access_token);
+ if(!u)return false;
+ cloudUlozRelaciu({token:p.access_token, obnova:p.refresh_token||"",
+   id:u.id, email:u.email, platnyDo:u.platnyDo});
+ try{ history.replaceState(null,"",cloudAdresaNavratu()) }catch(e){}
+ return true;
+}
+
+/* ---------- prenos dát ---------- */
+function cloudHlavicky(){
+ const r=cloudRelacia();
+ return {"apikey":CLOUD.anon,"Authorization":"Bearer "+((r&&r.token)||""),
+         "Content-Type":"application/json"};
+}
+function cloudPopisSavu(){
+ return {meno:S.meno+" "+S.priez, uroven:S.lvl, mesiac:S.mesiac, den:S.den,
+         jednotky:S.unTotal, verzia:HRA};
+}
+async function cloudNahraj(){
+ if(!cloudNastavene())return {ok:false,t:"Zálohovanie nie je v tejto verzii nastavené."};
+ if(!cloudPrihlaseny())return {ok:false,t:"Najprv sa prihlás."};
+ const r=cloudRelacia();
+ const telo=Object.assign({id:r.id, data:exportKod(), kedy:new Date().toISOString()},
+   cloudPopisSavu());
+ try{
+  const odp=await fetch(CLOUD.url+"/rest/v1/"+CLOUD.tabulka,{
+   method:"POST",
+   headers:Object.assign({},cloudHlavicky(),
+     {"Prefer":"resolution=merge-duplicates,return=minimal"}),
+   body:JSON.stringify(telo)});
+  if(!odp.ok)return {ok:false,t:"Zálohovanie zlyhalo ("+odp.status+")."};
+  S.cloudKedy=telo.kedy;
+  return {ok:true,t:"Postup je zálohovaný na tvojom účte."};
+ }catch(e){ return {ok:false,t:"Nepodarilo sa spojiť so serverom."} }
+}
+async function cloudInfo(){
+ if(!cloudNastavene()||!cloudPrihlaseny())return null;
+ const r=cloudRelacia();
+ try{
+  const odp=await fetch(CLOUD.url+"/rest/v1/"+CLOUD.tabulka+
+    "?id=eq."+encodeURIComponent(r.id)+"&select=meno,uroven,mesiac,den,jednotky,verzia,kedy",
+    {headers:cloudHlavicky()});
+  if(!odp.ok)return null;
+  const zoz=await odp.json();
+  return (zoz&&zoz.length)?zoz[0]:null;
+ }catch(e){ return null }
+}
+async function cloudStiahni(){
+ if(!cloudNastavene())return {ok:false,t:"Zálohovanie nie je v tejto verzii nastavené."};
+ if(!cloudPrihlaseny())return {ok:false,t:"Najprv sa prihlás."};
+ const r=cloudRelacia();
+ try{
+  const odp=await fetch(CLOUD.url+"/rest/v1/"+CLOUD.tabulka+
+    "?id=eq."+encodeURIComponent(r.id)+"&select=data,kedy",{headers:cloudHlavicky()});
+  if(!odp.ok)return {ok:false,t:"Načítanie zlyhalo ("+odp.status+")."};
+  const zoz=await odp.json();
+  if(!zoz||!zoz.length||!zoz[0].data)return {ok:false,t:"Na účte zatiaľ nič nie je."};
+  const v=importKod(zoz[0].data);
+  return {ok:true,t:"Postup stiahnutý z účtu.",stav:v.stav,hra:v.hra,
+          build:v.build,kedy:zoz[0].kedy};
+ }catch(e){ return {ok:false,t:"Záloha je poškodená alebo sa nepodarilo spojiť."} }
+}
+/* Ktorá pozícia je novšia — aby stiahnutie neprepísalo rozohranú hru omylom. */
+function ktoryJeNovsi(kedyMiestny,kedyCloud){
+ const a=Date.parse(kedyMiestny||"")||0, b=Date.parse(kedyCloud||"")||0;
+ if(!a&&!b)return "neznáme";
+ if(b>a)return "cloud";
+ if(a>b)return "miestny";
+ return "rovnaké";
+}
+
 /* ===================== KASÍNO =====================
    Nepravidelný príjem, hotovosť v ruke a stres. Pre túto profesiu je to
    presne tá kombinácia, na ktorej sa ľudia lámu. Hra to nekomentuje —
@@ -3020,7 +3174,7 @@ function scrGame(){
  app.innerHTML=`<div class="telefon">${stavovyRiadok()}${profilKarta()}<div id="body"></div></div>`+paticka();
  paintFace("pf",cfgOf(),4);
  const V={domov:vDomov,akcie:vAkcie,klienti:vKlienti,kalendar:vKalendar,tabula:vTabula,
-   potreby:vPotreby,obchod:vPotreby,menu:vMenu,crm:crmVyber,kasino:vKasino};
+   potreby:vPotreby,obchod:vPotreby,menu:vMenu,crm:crmVyber,kasino:vKasino,zaloha:vZaloha};
  (V[S.view]||vDomov)();
 }
 
@@ -3577,11 +3731,17 @@ async function vMenu(){
     <button class="btn-sm" ${s?"":"disabled"} onclick="doLoad(${i})">Načítať</button>
     <button class="btn-sm" ${s?"":"disabled"} onclick="doDel(${i})">Zmazať</button></div></div>`}
  h+=`<hr><button onclick="napoveda(false)">❔ Ako sa to hrá</button>
+  <button onclick="vsetkyNovinky()">🆕 Čo je nové</button>
   <hr><h3>Prenos na iné zariadenie</h3>
-  <p class="dim" style="font-size:11px;margin-bottom:6px">Uložená hra žije v pamäti tohto prehliadača,
-   takže na inom telefóne ju nenájdeš. Preneseš ju cez kód — vyexportuj ho tu a na druhom zariadení vlož.</p>
+  <p class="podnadpis">Postup sa drží ${KDE_ULOZENE==="prehliadač"?"v tomto prehliadači":"v tomto zariadení"}.
+   Na iné zariadenie ho dostaneš prenosovým kódom — alebo cez zálohu na účte.</p>
   <button onclick="ukazExport()">📤 Vytvoriť prenosový kód</button>
   <button onclick="ukazImport()">📥 Načítať z prenosového kódu</button>
+  <button data-tip="Prihlásiš sa cez Google a postup sa uloží na tvoj účet. Potom ho máš na každom zariadení bez prenosového kódu."
+   onclick="S.view='zaloha';render()">☁️ Záloha na účet ${
+   cloudNastavene()?(cloudPrihlaseny()?'<span class="green mala">· prihlásený</span>'
+     :'<span class="dim mala">· neprihlásený</span>')
+    :'<span class="dim mala">· nenastavené</span>'} ${tipZnak}</button>
   <button data-tip="Vlož kód od kolegu a hra porovná, v akom zostavení vznikol. Nič sa nenačíta." onclick="overKod()">🔎 Overiť kód od kolegu ${tipZnak}</button>
   <hr><button onclick="S.view='akcie';render()">← Späť do hry</button>
   <button onclick="if(confirm('Naozaj začať odznova? Neuložený postup sa stratí.')){newGame();render()}">Nová hra</button></div>`;
@@ -4036,6 +4196,10 @@ const tipZnak='<span class="tipik">ⓘ</span>';
    hra mu ukáže všetko, čo medzitým pribudlo.                              */
 
 const NOVINKY=[
+ {v:"0.9.0", nm:"Záloha na účet", body:[
+  "V nastaveniach sa dá prihlásiť cez Google a uložiť postup na účet.",
+  "Postup potom stiahneš na ktoromkoľvek zariadení bez prenosového kódu.",
+  "Hra ti povie, ktorá pozícia je novšia, aby si si omylom neprepísal rozohranú hru."]},
  {v:"0.8.8", nm:"Oprava zobrazenia na telefóne", body:[
   "Pri pridaní na plochu telefónu už obsah nelezie pod ostrovček ani domovskú čiarku.",
   "Ošetrené sú všetky štyri okraje displeja aj režim celej obrazovky."]},
@@ -4484,6 +4648,81 @@ function vKrypto(){
  h+='</div>';
  h+='<hr><button onclick="kryptoTikStop();kasSpat()">← Späť do kasína</button></div>';
  setBody(h);
+}
+
+/* ---------- obrazovka zálohovania ---------- */
+function vZaloha(){
+ if(!cloudNastavene()){
+  setBody(appBar("Záloha na účet")+`<div class="panel">
+   <div class="karta pozor mala">V tejto verzii nie je zálohovanie na účet nastavené.
+    Postup sa drží v tomto prehliadači a preniesť sa dá prenosovým kódom.</div>
+   </div>`);
+  return;
+ }
+ let h=appBar("Záloha na účet","Prihlás sa a postup budeš mať na každom zariadení.");
+ h+=`<div class="panel">`;
+ if(!cloudPrihlaseny()){
+  h+=`<div class="karta mala">Zatiaľ nie si prihlásený. Prihlásenie prebehne cez Google —
+   hra sa dozvie len tvoju e-mailovú adresu.</div>
+   <button class="btn-go" onclick="cloudPrihlas()">Prihlásiť sa cez Google</button>`;
+ }else{
+  h+=`<div class="karta dobre mala">Prihlásený ako <b>${cloudEmail()||"účet Google"}</b></div>
+   <div id="cloudStav" class="mala dim">Zisťujem, čo máš na účte…</div>
+   <button class="btn-go" onclick="zalohaNahraj()">⬆︎ Nahrať tento postup na účet</button>
+   <button onclick="zalohaStiahni()">⬇︎ Stiahnuť postup z účtu</button>
+   <hr><button class="btn-tichy" onclick="cloudOdhlas();render()">Odhlásiť sa</button>`;
+ }
+ h+=`</div>`;
+ setBody(h);
+ if(cloudPrihlaseny())zalohaZisti();
+}
+async function zalohaZisti(){
+ const e=document.getElementById("cloudStav"); if(!e)return;
+ const i=await cloudInfo();
+ if(!i){ e.innerHTML='<span class="dim">Na účte zatiaľ nič nie je.</span>'; return }
+ const kto=ktoryJeNovsi(S.cloudKedy,i.kedy);
+ e.innerHTML=`<div class="panel2 mala">Na účte: <b>${i.meno||"?"}</b> ·
+  úroveň ${i.uroven} · mesiac ${i.mesiac}/${i.den} · <b class="un-t">${i.jednotky} UN</b>
+  <br><span class="dim">uložené ${i.kedy?new Date(i.kedy).toLocaleString("sk-SK"):"?"}
+  ${i.verzia?" · v"+i.verzia:""}</span>
+  ${kto==="cloud"?'<br><span class="gold">Na účte je novšia pozícia než tu.</span>':""}
+  ${kto==="miestny"?'<br><span class="green">Tu máš novšiu pozíciu než na účte.</span>':""}</div>`;
+}
+async function zalohaNahraj(){
+ const e=document.getElementById("cloudStav");
+ if(e)e.innerHTML='<span class="dim">Nahrávam…</span>';
+ const r=await cloudNahraj();
+ if(e)e.innerHTML=`<div class="karta ${r.ok?"dobre":"zle"} mala">${r.t}</div>`;
+ r.ok?sCash():sBad();
+ if(r.ok)zalohaZisti();
+}
+async function zalohaStiahni(){
+ const e=document.getElementById("cloudStav");
+ if(e)e.innerHTML='<span class="dim">Sťahujem…</span>';
+ const r=await cloudStiahni();
+ if(!r.ok){ if(e)e.innerHTML=`<div class="karta zle mala">${r.t}</div>`; sBad(); return }
+ /* stiahnutie prepíše rozohranú hru — nech to hráč potvrdí vedome */
+ const s=r.stav||{};
+ app.innerHTML=`<div class="panel"><h2>Stiahnuť postup z účtu?</h2>
+  <p class="podnadpis">Nahradí to hru, ktorú máš rozohranú v tomto prehliadači.</p>
+  <div class="karta zvyraz mala">Na účte: <b>${s.meno||"?"} ${s.priez||""}</b> ·
+   úroveň ${s.lvl||"?"} · mesiac ${s.mesiac||"?"}/${s.den||"?"} ·
+   <b class="un-t">${s.unTotal||0} UN</b>
+   <br><span class="dim">uložené ${r.kedy?new Date(r.kedy).toLocaleString("sk-SK"):"?"}</span></div>
+  <div class="karta mala">Teraz tu hráš: <b>${S.meno} ${S.priez}</b> ·
+   úroveň ${S.lvl} · mesiac ${S.mesiac}/${S.den} · <b class="un-t">${S.unTotal} UN</b></div>
+  <button class="btn-go" onclick="zalohaPotvrd()">Áno, načítať z účtu →</button>
+  <button onclick="S.view='zaloha';render()">← Nechať to tak</button></div>`;
+ window.__zalohaStav=r;
+}
+function zalohaPotvrd(){
+ const r=window.__zalohaStav; if(!r||!r.stav)return;
+ S=migrujStav(r.stav); CRM=null;M=null;EX=null;SC=null;KAS=null;
+ S.scr="game"; S.view="domov"; S.maxE=maxEnergia(); S.cloudKedy=r.kedy;
+ logg("Postup stiahnutý z účtu.","green");
+ autosave(); sGood();
+ window.__zalohaStav=null;
+ ukazNovinky(render);
 }
 
 /* ===================== CRM VOLANIE (v0.4.1 — viacťahový rozhovor) ===================== */
@@ -5475,6 +5714,7 @@ function endMonth(){
  const lvlUp=checkLevel();
  const spravy=obnovTabulu();
  dopnZasoby();
+ if(typeof cloudTichaZaloha==="function")cloudTichaZaloha();
  const dane=(S.mesiac===6);
  if(stornoTxt2.length)txt=txt.concat(stornoTxt2);
  app.innerHTML=hud()+`<div class="panel"><h2>Uzávierka · mesiac ${S.mesiac}</h2>
@@ -5624,6 +5864,7 @@ window.addEventListener("error",function(ev){
   console.error(ev.error);
 });
 tipZapoj();
+try{cloudSpracujNavrat()}catch(e){}
 newGame();
 (async()=>{
   const a=await maAutosave();

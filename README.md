@@ -1,6 +1,6 @@
 # PROVÍZIA — čo nahrať na Vercel
 
-Verzia **0.8.7**, zostavenie **2026-08-06-20b0a5**
+Verzia **0.9.0**, zostavenie **2026-08-06-71ea62**
 
 Do Vercelu ide **celý tento priečinok**. Sú v ňom štyri súbory a všetky
 tam patria:
@@ -11,6 +11,7 @@ tam patria:
 | `vercel.json` | zabráni tomu, aby testerom zostala v prehliadači stará verzia |
 | `manifest.json` | umožní pridať hru na plochu telefónu ako aplikáciu |
 | `icon.svg` | ikona, ktorá sa pri tom zobrazí |
+| `ZALOHA-NA-UCET.md` | návod, ako zapnúť prihlásenie cez Google (nenahráva sa) |
 
 ---
 
@@ -47,7 +48,7 @@ testeri videli starú hru aj po nasadení novej — presne ten problém,
 čo si mal.
 
 **Overenie ostáva v hre.** V Nastaveniach je zostavenie
-(`2026-08-06-20b0a5`). Keď si nie ste istí, porovnajte tento reťazec.
+(`2026-08-06-71ea62`). Keď si nie ste istí, porovnajte tento reťazec.
 A v tých istých Nastaveniach je **Overiť kód od kolegu** — vložíš jeho
 prenosový kód a hra povie, či beží na staršom súbore.
 
