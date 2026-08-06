@@ -1,8 +1,7 @@
 # Záloha na účet cez Google — čo treba nastaviť
 
-Hra to má hotové. Chýbajú len dva údaje, ktoré si vygeneruješ raz
-a vpíšeš do `index.html`. Kým tam nie sú, funkcia je vypnutá a hra
-beží presne ako doteraz.
+**Údaje sú už vyplnené** — v hre je tvoja adresa aj kľúč. Zostáva
+dokončiť nastavenie na strane Supabase (kroky 2 a 3 nižšie).
 
 Celé to beží v prehliadači — **nepotrebuješ vlastný server**. Prihlásenie
 aj úložisko zabezpečí Supabase, ktorý má na tento rozsah bezplatnú úroveň.

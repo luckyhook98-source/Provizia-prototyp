@@ -1,6 +1,6 @@
 # PROVÍZIA — čo nahrať na Vercel
 
-Verzia **0.9.0**, zostavenie **2026-08-06-71ea62**
+Verzia **0.9.1**, zostavenie **2026-08-06-e48b2d**
 
 Do Vercelu ide **celý tento priečinok**. Sú v ňom štyri súbory a všetky
 tam patria:
@@ -48,7 +48,7 @@ testeri videli starú hru aj po nasadení novej — presne ten problém,
 čo si mal.
 
 **Overenie ostáva v hre.** V Nastaveniach je zostavenie
-(`2026-08-06-71ea62`). Keď si nie ste istí, porovnajte tento reťazec.
+(`2026-08-06-e48b2d`). Keď si nie ste istí, porovnajte tento reťazec.
 A v tých istých Nastaveniach je **Overiť kód od kolegu** — vložíš jeho
 prenosový kód a hra povie, či beží na staršom súbore.
 

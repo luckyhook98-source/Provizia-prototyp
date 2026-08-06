@@ -1869,7 +1869,11 @@ function obnovTabulu(){
 }
 
 /* ===================== STAV ===================== */
-const DNI=12, MESIACE=6, KAPACITA=3;
+const DNI=12, KAPACITA=3;
+/* Kým sa dolaďuje hrateľnosť, hra nemá koniec — testuje sa donekonečna.
+   Príbehové vyvrcholenie príde, keď na to bude čas. */
+const NEKONECNO=true;
+const MESIACE=NEKONECNO?Infinity:6;
 const DNY=["Pondelok","Utorok","Streda","Štvrtok","Piatok"];
 const jeVikend=d=>d===6||d===12;
 const ATTRS=[["kom","Komunikácia"],["dov","Dôveryhodnosť"],["emp","Empatia"],
@@ -1880,11 +1884,11 @@ const FAZY=["RÁNO · Kancelária","POOBEDIE · Terén","VEČER · Rozvoj"];
 let S={}, CRM=null, M=null, EX=null, SC=null;
 
 const VERZIA=3;                 /* verzia formátu uloženej pozície */
-const HRA="0.9.0";              /* verzia hry — zobrazuje sa v rozhraní */
+const HRA="0.9.1";              /* verzia hry — zobrazuje sa v rozhraní */
 /* Otlačok konkrétneho zostavenia. Dopĺňa sa pri skladaní súboru, takže dve
    rôzne zostavenia tej istej verzie sa dajú od seba rozoznať. Keď tester hlási
    chybu, stačí porovnať tento reťazec. */
-const BUILD="2026-08-06-71ea62";
+const BUILD="2026-08-06-e48b2d";
 function prazdnyStav(){return {
  v:VERZIA, scr:"phone", view:"domov",
  meno:"", priez:"", rok:1996, pohl:"m", hair:0, beard:0, skin:0, hairCol:0, okuliare:false,
@@ -2240,7 +2244,7 @@ function ponukaTerminov(minOdstup){
  const od=Math.max(1,minOdstup||1);
  for(let off=od;off<=od+9&&out.length<3;off++){
   const t=a+off; const m=Math.floor((t-1)/DNI)+1, d=(t-1)%DNI+1;
-  if(m>MESIACE)break;
+  if(m>MESIACE)break;   /* pri nekonečnej hre neplatí */
   if(!jeVikend(d)&&volnoDna(m,d)>0)out.push({m,d,off});
  }
  return out;
@@ -2486,8 +2490,8 @@ function porovnajZostavenie(hra,build){
    Návod na vyplnenie je v priloženom README.                                 */
 
 const CLOUD={
- url:"https://sbnecvrkjniniamqwmls.supabase.co",                 /* napr. https://xxxxxxxx.supabase.co */
- anon:"sb_publishable_EcI8-UDI_Tb0ZSsryaWNUQ_HZKSe-pf",                /* verejný kľúč projektu (anon public) */
+ url:"https://sbnecvrkjniniamqwmls.supabase.co",
+ anon:"sb_publishable_EcI8-UDI_Tb0ZSsryaWNUQ_HZKSe-pf",
  tabulka:"savy"
 };
 const CLOUD_KLUC="provizia:cloud";
@@ -2619,6 +2623,36 @@ async function cloudStiahni(){
   return {ok:true,t:"Postup stiahnutý z účtu.",stav:v.stav,hra:v.hra,
           build:v.build,kedy:zoz[0].kedy};
  }catch(e){ return {ok:false,t:"Záloha je poškodená alebo sa nepodarilo spojiť."} }
+}
+/* ---------- automatická denná záloha ----------
+   Raz za herný deň, na pozadí. Keď sa nepodarí, hra si to len poznačí
+   a skúsi to zajtra — hráča to nesmie zdržať ani vyrušiť. */
+let CLOUD_BEZI=false;
+async function cloudZalohujDen(){
+ if(!cloudNastavene()||!cloudPrihlaseny())return;
+ const dnes=S.mesiac+"/"+S.den;
+ if(S.cloudDen===dnes||CLOUD_BEZI)return;
+ CLOUD_BEZI=true;
+ S.cloudDen=dnes;
+ try{
+  const r=await cloudNahraj();
+  S.cloudChyba=r.ok?"":r.t;
+ }catch(e){ S.cloudChyba="Zálohovanie sa nepodarilo." }
+ CLOUD_BEZI=false;
+}
+/* ---------- štart z účtu ----------
+   Na novom zariadení sa hráč prihlási a stiahne si najnovší postup
+   bez toho, aby musel čokoľvek vytvárať. */
+async function cloudNacitajDoHry(){
+ const r=await cloudStiahni();
+ if(!r.ok)return r;
+ S=migrujStav(r.stav);
+ CRM=null;M=null;EX=null;SC=null;KAS=null;
+ S.scr="game"; S.view="domov"; S.maxE=maxEnergia();
+ S.cloudKedy=r.kedy; S.cloudDen=S.mesiac+"/"+S.den;
+ logg("Postup stiahnutý z účtu.","green");
+ autosave();
+ return r;
 }
 /* Ktorá pozícia je novšia — aby stiahnutie neprepísalo rozohranú hru omylom. */
 function ktoryJeNovsi(kedyMiestny,kedyCloud){
@@ -3045,6 +3079,7 @@ function scrPhone(){
  <div class="job"><b>Čašník / čašníčka</b><br><span class="dim">Dohodou · Zlaté Moravce</span></div>
  <button class="btn-go" onclick="sClick();S.scr='cv';render()">Odoslať životopis →</button>
  <button onclick="menuLoad(true)">Načítať uloženú hru z tohto zariadenia</button>
+ ${cloudNastavene()?`<button data-tip="Prihlás sa cez Google a stiahni si postup, ktorý máš uložený na účte. Funguje na akomkoľvek zariadení — aj na takom, kde si ešte nehral." onclick="uvodZUctu()">☁️ ${cloudPrihlaseny()?"Pokračovať z účtu Google":"Prihlásiť sa cez Google a stiahnuť postup"} ${tipZnak}</button>`:""}
  <button data-tip="Máš kód z iného zariadenia? Vlož ho a hra sa spustí aj s postavou — vytvárať ju nemusíš." onclick="ukazImportUvod()">📥 Načítať z prenosového kódu ${tipZnak}</button>
  <p class="dim center" style="font-size:10px">Ostatné ponuky práve neprijímajú.</p></div>`;
 }
@@ -4196,6 +4231,11 @@ const tipZnak='<span class="tipik">ⓘ</span>';
    hra mu ukáže všetko, čo medzitým pribudlo.                              */
 
 const NOVINKY=[
+ {v:"0.9.1", nm:"Hra bez konca a záloha sama", body:[
+  "Hra sa už nekončí — dá sa hrať donekonečna, daňové priznanie prichádza každý rok.",
+  "Postup sa raz za herný deň sám zálohuje na tvoj účet.",
+  "Pri spustení hra overí, či si medzitým nehral na inom zariadení, a ponúkne novšiu pozíciu.",
+  "Na úvodnej obrazovke sa dá prihlásiť cez Google a stiahnuť postup aj na zariadení, kde si ešte nehral."]},
  {v:"0.9.0", nm:"Záloha na účet", body:[
   "V nastaveniach sa dá prihlásiť cez Google a uložiť postup na účet.",
   "Postup potom stiahneš na ktoromkoľvek zariadení bez prenosového kódu.",
@@ -4723,6 +4763,59 @@ function zalohaPotvrd(){
  autosave(); sGood();
  window.__zalohaStav=null;
  ukazNovinky(render);
+}
+
+/* ---------- prihlásenie a stiahnutie na úvodnej obrazovke ---------- */
+function uvodZUctu(){
+ if(!cloudNastavene()){S.scr="phone";render();return}
+ if(!cloudPrihlaseny()){ cloudPrihlas(); return }
+ app.innerHTML=`<div class="panel"><h1>Postup z účtu</h1>
+  <p class="podnadpis">Prihlásený ako <b>${cloudEmail()||"účet Google"}</b>.
+   Zisťujem, čo máš uložené…</p>
+  <div id="uvodStav" class="mala dim">Moment…</div>
+  <button onclick="cloudOdhlas();render()">Odhlásiť sa</button>
+  <button onclick="S.scr='phone';render()">← Späť na ponuky práce</button></div>`;
+ uvodZisti();
+}
+async function uvodZisti(){
+ const e=document.getElementById("uvodStav"); if(!e)return;
+ const i=await cloudInfo();
+ if(!i){ e.innerHTML='<div class="karta pozor mala">Na účte zatiaľ nič nie je. '+
+   'Začni novú hru a postup sa bude zálohovať sám.</div>'; return }
+ e.innerHTML=`<div class="karta zvyraz mala"><b>${i.meno||"?"}</b> ·
+  úroveň ${i.uroven} · mesiac ${i.mesiac}/${i.den} · <b class="un-t">${i.jednotky} UN</b>
+  <br><span class="dim">uložené ${i.kedy?new Date(i.kedy).toLocaleString("sk-SK"):"?"}
+  ${i.verzia?" · v"+i.verzia:""}</span></div>
+  <button class="btn-go" onclick="uvodStiahni()">⬇︎ Pokračovať v tomto postupe</button>`;
+}
+async function uvodStiahni(){
+ const e=document.getElementById("uvodStav");
+ if(e)e.innerHTML='<span class="dim">Sťahujem…</span>';
+ const r=await cloudNacitajDoHry();
+ if(!r.ok){ if(e)e.innerHTML=`<div class="karta zle mala">${r.t}</div>`; sBad(); return }
+ sGood(); ukazNovinky(render);
+}
+
+/* ---------- kontrola pri spustení ----------
+   Hráč mohol medzitým hrať na inom zariadení. Ak je na účte novšia
+   pozícia, hra sa spýta — nikdy neprepíše nič sama. */
+async function cloudKontrolaPriStarte(){
+ if(!cloudNastavene()||!cloudPrihlaseny())return false;
+ let i=null;
+ try{ i=await cloudInfo() }catch(e){ return false }
+ if(!i||!i.kedy)return false;
+ if(ktoryJeNovsi(S.cloudKedy,i.kedy)!=="cloud")return false;
+ app.innerHTML=`<div class="panel"><h1>Na účte máš novšiu hru</h1>
+  <p class="podnadpis">Vyzerá to, že si medzitým hral na inom zariadení.</p>
+  <div class="karta zvyraz mala"><b>Na účte</b><br>${i.meno||"?"} ·
+   úroveň ${i.uroven} · mesiac ${i.mesiac}/${i.den} · <b class="un-t">${i.jednotky} UN</b>
+   <br><span class="dim">uložené ${new Date(i.kedy).toLocaleString("sk-SK")}</span></div>
+  <div class="karta mala"><b>Tu v tomto zariadení</b><br>${S.meno} ${S.priez} ·
+   úroveň ${S.lvl} · mesiac ${S.mesiac}/${S.den} · <b class="un-t">${S.unTotal} UN</b>
+   ${S.cloudKedy?`<br><span class="dim">zálohované ${new Date(S.cloudKedy).toLocaleString("sk-SK")}</span>`:""}</div>
+  <button class="btn-go" onclick="uvodStiahni()">⬇︎ Načítať novšiu z účtu</button>
+  <button onclick="render()">Zostať pri tejto</button></div>`;
+ return true;
 }
 
 /* ===================== CRM VOLANIE (v0.4.1 — viacťahový rozhovor) ===================== */
@@ -5616,6 +5709,7 @@ function novyDen(){
   logg("Ráno si sa zobudil chorý. Polovica energie.","red")}
  if(jeVikend(S.den))S.vikendHotovy=false;
  S.volalDnes=false;          /* nový deň, nový zoznam čísel */
+ if(typeof cloudZalohujDen==="function")cloudZalohujDen();
  checkLevel();
  if(S.den>DNI){S.den=1;endMonth();return true}
  if(spracujPovysenie()){povysenieObrazovka();return true}
@@ -5715,7 +5809,8 @@ function endMonth(){
  const spravy=obnovTabulu();
  dopnZasoby();
  if(typeof cloudTichaZaloha==="function")cloudTichaZaloha();
- const dane=(S.mesiac===6);
+ /* daňové priznanie prichádza každý rok — teda každých dvanásť mesiacov */
+ const dane=(S.mesiac%12===6);
  if(stornoTxt2.length)txt=txt.concat(stornoTxt2);
  app.innerHTML=hud()+`<div class="panel"><h2>Uzávierka · mesiac ${S.mesiac}</h2>
   <div class="panel2">Provízie: <b class="money-t">+${vyplata.toFixed(2)} €</b>
@@ -5753,7 +5848,7 @@ function taxEvent(){
  <p class="dim" style="font-size:10px;margin-top:6px">Organizácia ${A("org")}/10${A("org")>=6?' — <span class="green">−10 b. b. riziko</span>':""}</p></div>`;
 }
 function taxRes(v){
- if(S.flags.taxDone)return; S.flags.taxDone=true;
+ if(S.flags.taxRok===S.mesiac)return; S.flags.taxRok=S.mesiac; S.flags.taxDone=true;
  const cena=[0,80,350][v]; let risk=[.45,.20,0][v]; if(A("org")>=6)risk=Math.max(0,risk-.10);
  zaplat(cena); const fail=Math.random()<risk;
  if(fail){const p=180+Math.floor(Math.random()*320);zaplat(p);pridajRep(-5);
@@ -5870,6 +5965,11 @@ newGame();
   const a=await maAutosave();
   if(a){window.__auto=a;S.scr="resume"}
   render();
+  /* na pozadí sa overí, či na účte nie je novšia pozícia */
+  try{
+    if(typeof cloudKontrolaPriStarte==="function"&&S.scr==="game")
+      await cloudKontrolaPriStarte();
+  }catch(e){}
 })();
 </script>
 </body>
