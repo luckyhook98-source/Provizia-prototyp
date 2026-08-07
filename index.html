@@ -147,6 +147,7 @@ label{display:block;font-size:13px;color:var(--dim);margin-bottom:5px}
 .appik.a-kli .ik{background:linear-gradient(160deg,#ffb03a,#e07b06)}
 .appik.a-fir .ik{background:linear-gradient(160deg,#ff9a3c,#d1600a)}
 .appik.a-ja .ik{background:linear-gradient(160deg,#34d97f,#129152)}
+.appik.a-nak .ik{background:linear-gradient(160deg,#3ad6b0,#12907a)}
 .appik.a-kas .ik{background:linear-gradient(160deg,#3f7bff,#1b3fb8)}
 .appik.a-set .ik{background:linear-gradient(160deg,#7b5cf5,#4c2fb0)}
 .odznak{position:absolute;top:-5px;right:6px;min-width:21px;height:21px;line-height:21px;
@@ -1884,11 +1885,11 @@ const FAZY=["RÁNO · Kancelária","POOBEDIE · Terén","VEČER · Rozvoj"];
 let S={}, CRM=null, M=null, EX=null, SC=null;
 
 const VERZIA=3;                 /* verzia formátu uloženej pozície */
-const HRA="0.9.2";              /* verzia hry — zobrazuje sa v rozhraní */
+const HRA="0.9.3";              /* verzia hry — zobrazuje sa v rozhraní */
 /* Otlačok konkrétneho zostavenia. Dopĺňa sa pri skladaní súboru, takže dve
    rôzne zostavenia tej istej verzie sa dajú od seba rozoznať. Keď tester hlási
    chybu, stačí porovnať tento reťazec. */
-const BUILD="2026-08-06-8dc645";
+const BUILD="2026-08-07-557c3c";
 function prazdnyStav(){return {
  v:VERZIA, scr:"phone", view:"domov",
  meno:"", priez:"", rok:1996, pohl:"m", hair:0, beard:0, skin:0, hairCol:0, okuliare:false,
@@ -1898,7 +1899,8 @@ function prazdnyStav(){return {
  stres:15, pohoda:70, dovolenka:0, partnerMeno:"",
  vztahy:{}, znami:[],
  klFilter:"vsetci", klStrana:0, vikendHotovy:false, crmZasoba:{}, crmSeg:"studene", volalDnes:false,
- gamba:0, kasBilancia:0, kasNavstev:0, videnaVerzia:HRA, tikety:[], zapasy:[], zapasyDen:"", kripto:null,
+ gamba:0, kasBilancia:0, kasNavstev:0, videnaVerzia:HRA,
+ majetok:null, nakupKat:null, tikety:[], zapasy:[], zapasyDen:"", kripto:null,
  povysenie:null, unMinulyMesiac:0,
  tabula:[], tabulaId:0, tabulaMesiac:0, tabRezim:"aktualny",
  buff:{enZajtra:0, trpDnes:0}, nezdrave:0, energakov:0,
@@ -2013,7 +2015,13 @@ function migrujStav(st){
  try{ st.__omladenie=omladObsah(st) }catch(e){ st.__omladenie=null }
  return st;
 }
-const A=k=>S.attrs[k];
+/* Atribút je to, čo si natrénoval, plus to, čo na sebe máš.
+   Nikdy neklesne pod nulu ani nepresiahne desiatku. */
+const A=function(k){
+ const zaklad=S.attrs[k]||0;
+ const bonus=(typeof majetokBonus==="function")?majetokBonus(k):0;
+ return Math.max(0,Math.min(10,zaklad+bonus));
+};
 /* Reputácia sa drží v rozsahu 0–100 a hotovosť nikdy nespadne pod nulu —
    prečerpanie sa mení na dlh voči agentúre. */
 function pridajRep(n){S.rep=Math.max(0,Math.min(100,(isFinite(S.rep)?S.rep:50)+n))}
@@ -2663,6 +2671,153 @@ function ktoryJeNovsi(kedyMiestny,kedyCloud){
  return "rovnaké";
 }
 
+/* ===================== NA ČO MÍŇAŤ =====================
+   Peniaze v tejto práci nie sú len skóre. Auto, v ktorom prídeš, oblek,
+   v ktorom sedíš, a byt, do ktorého sa večer vraciaš — to všetko sa
+   nejako prejaví.
+
+   Lacné riešenie takmer vždy niečo dá a niečo vezme. Drahé dá viac,
+   ale platí sa mesačne.                                                  */
+
+const KATEGORIE=[
+ {id:"oblecenie", nm:"Oblečenie", ik:"👔",
+  popis:"To, v čom sedíš oproti klientovi. Vidí to skôr, než niečo povieš."},
+ {id:"auto", nm:"Auto", ik:"🚗",
+  popis:"Ako sa dostaneš ku klientovi a čo uvidí, keď zaparkuješ."},
+ {id:"byvanie", nm:"Bývanie", ik:"🏠",
+  popis:"Kam sa večer vraciaš. Rozhoduje o tom, ako si oddýchneš."},
+ {id:"kurzy", nm:"Kurzy", ik:"🎓",
+  popis:"Jednorazová investícia do seba. Zostáva navždy."}
+];
+
+/* plus/minus sú body k atribútom, mes je mesačný náklad */
+const MAJETOK=[
+ /* ---------- oblečenie ---------- */
+ {id:"o_ziadne", kat:"oblecenie", nm:"To, čo máš v skrini", cena:0, mes:0,
+  plus:{}, minus:{dov:1},
+  popis:"Nohavice z outletu a košeľa po bratovi. Klient si to nevšimne vedome — ale všimne."},
+ {id:"o_lacny", kat:"oblecenie", nm:"Lacný oblek z obchodného centra", cena:180, mes:0,
+  plus:{dov:1}, minus:{},
+  popis:"Sedí zhruba. Na prvé stretnutia úplne stačí a nikto sa nepýta."},
+ {id:"o_dobry", kat:"oblecenie", nm:"Oblek na mieru", cena:1200, mes:0,
+  plus:{dov:2, kom:1}, minus:{},
+  popis:"Padne. Vojdeš inak a hovoríš inak — to druhé je na tom to dôležitejšie."},
+ {id:"o_luxus", kat:"oblecenie", nm:"Značkový oblek a hodinky", cena:4500, mes:0,
+  plus:{dov:3, kom:1}, minus:{emp:1},
+  popis:"Pôsobí to. Na niektorých klientov až príliš — od takého človeka sa im ťažšie priznáva, že nemajú."},
+
+ /* ---------- auto ---------- */
+ {id:"a_ziadne", kat:"auto", nm:"Autobus a vlak", cena:0, mes:60,
+  plus:{}, minus:{vyt:1, dov:1},
+  popis:"Lacné, ale na stretnutie chodíš unavený a nikdy nie skoro."},
+ {id:"a_stare", kat:"auto", nm:"Ojazdená Fabia", cena:2800, mes:110,
+  plus:{vyt:1}, minus:{dov:1},
+  popis:"Spoľahlivo ťa dovezie. Klient sa nepozerá, ale susedia áno."},
+ {id:"a_bezne", kat:"auto", nm:"Octavia na leasing", cena:1500, mes:340,
+  plus:{vyt:1, dov:1}, minus:{},
+  popis:"Presne to, čo od človeka v tejto práci čakajú. Nevyčnieva ani nesklame."},
+ {id:"a_drahe", kat:"auto", nm:"Ojazdené BMW na leasing", cena:4000, mes:690,
+  plus:{dov:2, kom:1}, minus:{org:1},
+  popis:"Otvorí dvere u tých, čo na to hľadia. A splátka ťa bude tlačiť do rýchlych rozhodnutí."},
+
+ /* ---------- bývanie ---------- */
+ {id:"b_rodicia", kat:"byvanie", nm:"U rodičov", cena:0, mes:0,
+  plus:{}, minus:{dov:1, emp:1},
+  popis:"Zadarmo a s teplou večerou. Tridsaťročný človek to však v hovore ťažko obchádza."},
+ {id:"b_podnajom", kat:"byvanie", nm:"Podnájom garsónky", cena:0, mes:420,
+  plus:{}, minus:{},
+  popis:"Vlastný priestor. Nič viac, nič menej."},
+ {id:"b_byt", kat:"byvanie", nm:"Dvojizbový byt na hypotéku", cena:12000, mes:560,
+  plus:{vyt:1, org:1}, minus:{},
+  popis:"Konečne miesto na prácu aj na oddych. A vieš, o čom hovoríš, keď príde reč na hypotéku."},
+ {id:"b_dom", kat:"byvanie", nm:"Dom za mestom", cena:38000, mes:820,
+  plus:{vyt:2, emp:1}, minus:{kom:1},
+  popis:"Pokoj, záhrada, rodina spokojná. Za každým klientom je to o dvadsať minút ďalej."},
+
+ /* ---------- kurzy ---------- */
+ {id:"k_rychly", kat:"kurzy", nm:"Víkendový predajný kurz", cena:250, mes:0,
+  plus:{kom:1}, minus:{dov:1},
+  popis:"Naučí ťa tlačiť. Funguje to — kým klient nezistí, že ho tlačíš."},
+ {id:"k_komunikacia", kat:"kurzy", nm:"Kurz komunikácie", cena:900, mes:0,
+  plus:{kom:2}, minus:{},
+  popis:"Dva dni s človekom, ktorý ťa nechá počúvať vlastné nahrávky. Nepríjemné a účinné."},
+ {id:"k_odbornost", kat:"kurzy", nm:"Odborná certifikácia", cena:1400, mes:0,
+  plus:{odb:2}, minus:{},
+  popis:"Konečne rozumieš tomu, čo predávaš. Klienti to spoznajú na otázkach, ktoré vieš zodpovedať."},
+ {id:"k_empatia", kat:"kurzy", nm:"Výcvik vedenia rozhovoru", cena:1100, mes:0,
+  plus:{emp:2}, minus:{},
+  popis:"O tom, ako sa pýtať a mlčať. Väčšina ľudí to považuje za stratu času, kým to neskúsi."},
+ {id:"k_organizacia", kat:"kurzy", nm:"Kurz organizácie práce", cena:700, mes:0,
+  plus:{org:2}, minus:{},
+  popis:"Papiere, termíny, poznámky. Nudné a zrazu máš o hodinu denne viac."},
+ {id:"k_kondicia", kat:"kurzy", nm:"Ročné členstvo v posilňovni", cena:400, mes:45,
+  plus:{vyt:1}, minus:{},
+  popis:"Nie je to kurz, ale funguje to lepšie než väčšina z nich."}
+];
+
+const majetokPolozka=id=>MAJETOK.find(m=>m.id===id);
+const vKategorii=kat=>MAJETOK.filter(m=>m.kat===kat);
+
+/* ---------- čo hráč práve má ---------- */
+function majetokStav(){
+ if(!S.majetok||typeof S.majetok!=="object")
+  S.majetok={oblecenie:"o_ziadne", auto:"a_ziadne", byvanie:"b_rodicia", kurzy:[]};
+ if(!Array.isArray(S.majetok.kurzy))S.majetok.kurzy=[];
+ ["oblecenie","auto","byvanie"].forEach(function(k){
+  if(!majetokPolozka(S.majetok[k]))S.majetok[k]={oblecenie:"o_ziadne",auto:"a_ziadne",
+    byvanie:"b_rodicia"}[k];
+ });
+ return S.majetok;
+}
+function maPolozku(id){
+ const m=majetokStav();
+ return m.oblecenie===id||m.auto===id||m.byvanie===id||m.kurzy.indexOf(id)>=0;
+}
+/* Súčet bodov k jednému atribútu zo všetkého, čo hráč má. */
+function majetokBonus(atr){
+ const m=majetokStav();
+ let s=0;
+ [m.oblecenie,m.auto,m.byvanie].concat(m.kurzy).forEach(function(id){
+  const p=majetokPolozka(id); if(!p)return;
+  s+=(p.plus&&p.plus[atr])||0;
+  s-=(p.minus&&p.minus[atr])||0;
+ });
+ return s;
+}
+/* Mesačné náklady na to, čo hráč vlastní. */
+function majetokMesacne(){
+ const m=majetokStav();
+ let s=0;
+ [m.oblecenie,m.auto,m.byvanie].concat(m.kurzy).forEach(function(id){
+  const p=majetokPolozka(id); if(p)s+=p.mes||0;
+ });
+ return s;
+}
+function kupMajetok(id){
+ const p=majetokPolozka(id);
+ if(!p)return {ok:false,t:"Taká položka neexistuje."};
+ if(maPolozku(id))return {ok:false,t:"Toto už máš."};
+ if(S.money<p.cena)return {ok:false,t:"Na to nemáš."};
+ const m=majetokStav();
+ zaplat(p.cena);
+ if(p.kat==="kurzy"){ m.kurzy.push(id) }
+ else { m[p.kat]=id }
+ S.maxE=maxEnergia();
+ logg(p.cena?`Kúpené: ${p.nm} za ${p.cena} €.`:`Zmena: ${p.nm}.`,"money-t");
+ return {ok:true,t:p.cena?`Kúpené za ${p.cena} €.`:"Zmenené."};
+}
+/* Krátke zhrnutie účinku — do zoznamu aj do nápovedy. */
+function popisUcinku(p){
+ const von=[];
+ Object.keys(p.plus||{}).forEach(function(k){von.push("+"+p.plus[k]+" "+nazovAtrib(k))});
+ Object.keys(p.minus||{}).forEach(function(k){von.push("−"+p.minus[k]+" "+nazovAtrib(k))});
+ return von.join(" · ")||"bez vplyvu na atribúty";
+}
+function nazovAtrib(k){
+ const n=(typeof ATTRS!=="undefined")&&ATTRS.find(function(a){return a[0]===k});
+ return n?n[1]:k;
+}
+
 /* ===================== KASÍNO =====================
    Nepravidelný príjem, hotovosť v ruke a stres. Pre túto profesiu je to
    presne tá kombinácia, na ktorej sa ľudia lámu. Hra to nekomentuje —
@@ -3209,7 +3364,8 @@ function scrGame(){
  app.innerHTML=`<div class="telefon">${stavovyRiadok()}${profilKarta()}<div id="body"></div></div>`+paticka();
  paintFace("pf",cfgOf(),4);
  const V={domov:vDomov,akcie:vAkcie,klienti:vKlienti,kalendar:vKalendar,tabula:vTabula,
-   potreby:vPotreby,obchod:vPotreby,menu:vMenu,crm:crmVyber,kasino:vKasino,zaloha:vZaloha};
+   potreby:vPotreby,obchod:vPotreby,menu:vMenu,crm:crmVyber,kasino:vKasino,zaloha:vZaloha,
+   nakupy:function(){ S.nakupKat?vNakupyKat():vNakupy() }};
  (V[S.view]||vDomov)();
 }
 
@@ -4031,6 +4187,7 @@ const APLIKACIE=[
  {id:"klienti",ik:"👥", far:"a-kli",  nm:"Klienti",   popis:"Ľudia, ktorých poznáš"},
  {id:"tabula", ik:"🏢", far:"a-fir",  nm:"Firma",     popis:"Tabuľa a tvoj postup"},
  {id:"potreby",ik:"❤️", far:"a-ja",   nm:"Ja",        popis:"Zdravie, vzťahy, bufet"},
+ {id:"nakupy", ik:"🛍", far:"a-nak",  nm:"Nákupy",    popis:"Oblečenie, auto, bývanie, kurzy"},
  {id:"kasino", ik:"🎰", far:"a-kas",  nm:"Kasíno",    popis:"Hry, stávky, krypto"},
  {id:"menu",   ik:"⚙️", far:"a-set",  nm:"Nastavenia",popis:"Ukladanie a prenos"}
 ];
@@ -4062,6 +4219,10 @@ function odznakApky(id){
    if(S.stres>=65||S.zdravie<40)return {t:"pozor", farba:"cerv"};
    if(S.pohoda<30)return {t:"pozor", farba:"gold"};
    return null;
+  }
+  if(id==="nakupy"){
+   const m=(typeof majetokMesacne==="function")?majetokMesacne():0;
+   return m?{t:m+" €", farba:"dim"}:null;
   }
   if(id==="kasino"){
    const t=(typeof otvoreneTikety==="function")?otvoreneTikety().length:0;
@@ -4231,6 +4392,10 @@ const tipZnak='<span class="tipik">ⓘ</span>';
    hra mu ukáže všetko, čo medzitým pribudlo.                              */
 
 const NOVINKY=[
+ {v:"0.9.3", nm:"Na čo míňať peniaze", body:[
+  "Pribudla aplikácia Nákupy — oblečenie, auto, bývanie a kurzy.",
+  "Každá vec sa prejaví na atribútoch. Lacné riešenia niečo dajú a niečo vezmú.",
+  "Auto, bývanie a členstvá stoja mesačne — objaví sa to na uzávierke."]},
  {v:"0.9.2", nm:"Ozvať sa znova a servis vo Volaní", body:[
   "Vo Volaní pribudli dva zoznamy — ľudia, ktorým sa dá ozvať znova, a klienti čakajúci na servis.",
   "Netreba chodiť do Klientov a hľadať ich medzi ostatnými."]},
@@ -4819,6 +4984,66 @@ async function cloudKontrolaPriStarte(){
   <button class="btn-go" onclick="uvodStiahni()">⬇︎ Načítať novšiu z účtu</button>
   <button onclick="render()">Zostať pri tejto</button></div>`;
  return true;
+}
+
+/* ---------- obrazovka nákupov ---------- */
+function vNakupy(){
+ majetokStav();
+ const mes=majetokMesacne();
+ let h=appBar("Nákupy","Za čo míňať peniaze — a čo ti to v práci dá alebo vezme.");
+ h+=`<div class="panel2 mala">Hotovosť <b class="money-t">${Math.round(S.money)} €</b>
+  · mesačne za to, čo máš: <b class="${mes>600?"red":"gold"}">${mes} €</b></div>`;
+ KATEGORIE.forEach(function(kat){
+  const m=majetokStav();
+  const teraz=(kat.id==="kurzy")?null:majetokPolozka(m[kat.id]);
+  h+=`<button data-tip="${kat.popis}" onclick="S.nakupKat='${kat.id}';render()">
+   ${kat.ik} <b>${kat.nm}</b>
+   <span class="dim mala"><br>${kat.id==="kurzy"
+     ? (m.kurzy.length?m.kurzy.length+" absolvovaných z "+vKategorii("kurzy").length
+        :"zatiaľ žiadny")
+     : (teraz?teraz.nm:"—")}</span> ${tipZnak}</button>`;
+ });
+ h+=`</div>`;
+ setBody(h);
+}
+function vNakupyKat(){
+ const kat=KATEGORIE.find(function(k){return k.id===S.nakupKat});
+ if(!kat){S.nakupKat=null;render();return}
+ const m=majetokStav();
+ const kurzy=(kat.id==="kurzy");
+ let h=`<div class="appbar">
+   <button class="spat" onclick="S.nakupKat=null;render()">‹</button>
+   <span class="nadpis">${kat.nm}</span></div>
+  <p class="podnadpis appsub">${kat.popis}</p><div class="panel">`;
+ h+=`<div class="panel2 mala">Hotovosť <b class="money-t">${Math.round(S.money)} €</b></div>`;
+ vKategorii(kat.id).forEach(function(p){
+  const mam=kurzy?(m.kurzy.indexOf(p.id)>=0):(m[kat.id]===p.id);
+  const draho=S.money<p.cena;
+  const plusy=Object.keys(p.plus||{}).map(function(k){
+    return `<span class="green">+${p.plus[k]} ${nazovAtrib(k)}</span>`});
+  const minusy=Object.keys(p.minus||{}).map(function(k){
+    return `<span class="red">−${p.minus[k]} ${nazovAtrib(k)}</span>`});
+  const ucinok=plusy.concat(minusy).join(" · ")||'<span class="dim">bez vplyvu</span>';
+  h+=`<button ${(mam||draho)?"disabled":""} data-tip="${p.popis}"
+    onclick="nakup('${p.id}')">
+   <b>${p.nm}</b> ${mam?'<span class="green">· máš</span>':
+     `<span class="money-t">· ${p.cena?p.cena+" €":"zadarmo"}</span>`}
+   <span class="mala"><br>${ucinok}${p.mes?` · <span class="dim">${p.mes} € mesačne</span>`:""}</span>
+   ${mam?"":" "+tipZnak}</button>`;
+ });
+ if(!kurzy)h+=`<div class="karta mala"><span class="dim">Zmena je okamžitá. Staré sa nevracia,
+  ale ani ho už neplatíš.</span></div>`;
+ h+=`</div>`;
+ setBody(h);
+}
+function nakup(id){
+ const r=kupMajetok(id);
+ r.ok?sCash():sBad();
+ if(!r.ok){
+  const e=document.getElementById("nakupStav");
+  if(e)e.innerHTML=`<div class="karta zle mala">${r.t}</div>`;
+ }
+ render();
 }
 
 /* ===================== CRM VOLANIE (v0.4.1 — viacťahový rozhovor) ===================== */
@@ -5815,7 +6040,7 @@ function nextPhase(){
 let stornoTxt2=[];
 function endMonth(){
  const vyplata=S.zmluvy.filter(z=>z.m===S.mesiac).reduce((a,z)=>a+z.eur,0);
- const naklady=480+(2026-S.rok>=45?150:0);
+ const naklady=480+(2026-S.rok>=45?150:0)+majetokMesacne();
  let stornoEur=0,txt=[];
  S.storna.filter(s=>s.m<=S.mesiac).forEach(s=>{
   const k=KL(s.kid), z=k?k.zmluvy.find(x=>x.prod===s.prod):null;
@@ -5870,7 +6095,8 @@ function endMonth(){
  app.innerHTML=hud()+`<div class="panel"><h2>Uzávierka · mesiac ${S.mesiac}</h2>
   <div class="panel2">Provízie: <b class="money-t">+${vyplata.toFixed(2)} €</b>
    <span class="dim">(${S.unMonth} UN × ${UN_RATE[S.lvl].toFixed(2)} € − 12 %)</span></div>
-  <div class="panel2">Náklady na život a prácu: <b class="red">−${naklady} €</b></div>
+  <div class="panel2">Náklady na život a prácu: <b class="red">−${naklady} €</b>
+   ${majetokMesacne()?`<br><span class="dim mala">z toho ${majetokMesacne()} € za auto, bývanie a členstvá</span>`:""}</div>
   ${stornoEur>0?`<div class="panel2"><b class="red">Storná: −${stornoEur.toFixed(2)} €</b></div>`:""}
   ${pokuta?`<div class="panel2"><b class="red">Pokuta: −${pokuta} €</b></div>`:""}
   ${txt.length?`<div class="panel2" style="font-size:11px">${txt.join("<br>")}</div>`:""}
