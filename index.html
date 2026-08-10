@@ -599,6 +599,30 @@ const PRODUCTS=[
  {id:"zp",    nm:"Životné poistenie",        un:120, need:"ochrana",   minOdb:0},
  {id:"izp",   nm:"Investičné životné (IŽP)", un:168, need:"__nikto__", minOdb:0}
 ];
+/* ===================== VÝŠKA ZMLUVY PODĽA PRÍJMU =====================
+   V realite sa suma poistenia aj výška úveru odvíja od toho, koľko človek
+   zarába — banka aj poisťovňa počítajú s jeho príjmom. Životné poistenie
+   rastie s príjmom takmer lineárne, hypotéka prudkejšie (kto zarába viac,
+   dosiahne na väčší úver), spotrebný úver miernejšie (má aj svoj strop). */
+const PRIJEM_ZAKLAD=1200;                 /* pri tomto príjme platí základná cena produktu */
+const PRIJEM_CITLIVOST={zp:1.0, izp:1.0, hypo:1.55, uver:0.7};
+const PRIJEM_ROZSAH={zp:[0.4,3], izp:[0.4,3], hypo:[0.22,5.5], uver:[0.5,2.1]};
+function unPreKlienta(p,k){
+ const c=PRIJEM_CITLIVOST[p.id];
+ if(!c)return p.un;                       /* produkty, ktoré s príjmom nesúvisia */
+ const pomer=(k&&k.prijemEur?k.prijemEur:PRIJEM_ZAKLAD)/PRIJEM_ZAKLAD;
+ const [min,max]=PRIJEM_ROZSAH[p.id];
+ const upraveny=Math.max(min,Math.min(max,Math.pow(pomer,c)));
+ return Math.max(1,Math.round(p.un*upraveny));
+}
+/* Textové pásmo pre kartu klienta — odvodené z toho istého čísla,
+   aby sa zobrazený príjem nikdy nerozišiel s tým, čo sa reálne počíta. */
+function pasmoPrijmu(eur){
+ if(eur<900)return "do 900 €";
+ if(eur<1400)return "900 – 1 400 €";
+ if(eur<2200)return "1 400 – 2 200 €";
+ return "nad 2 200 €";
+}
 const NEEDS={auto:"potrebuje poistiť auto",dochodok:"chce si sporiť na dôchodok",
  investicia:"chce zhodnotiť úspory",byvanie:"rieši vlastné bývanie",
  ochrana:"je živiteľ rodiny s úverom",
@@ -1199,6 +1223,41 @@ const SEGMENTY=[
     {t:"„Rozumiem, nechcem ťa do ničoho tlačiť.“",v:2,tech:"oznacenie"},
     {t:"„Veď o to práve ide, o prácu.“",v:-3,tech:"chyba"}]}]},
 
+ {id:"spolupracovnik", nm:"Spolupracovníci", ik:"🤝",
+  popis:"Uchádzači, ktorí sa ozvali na tvoj inzerát. Nehľadáš im produkt — hľadáš im prácu.",
+  kvalita:2, zasoba:0, odomkne:{lvl:4,rep:0},
+  potreby:["ochrana","dochodok","investicia","byvanie","auto","uver"],
+  uvody:[
+   {t:"„Dobrý deň, {OSL} {P}. Volám kvôli inzerátu — reagovali ste na pozíciu finančného poradcu.“",v:4,tech:"ram"},
+   {t:"„Dobrý deň, {MENO} {PRIEZ}. Máte chvíľu na to, aby som vám povedal, čo tá práca naozaj obnáša?“",v:4,tech:"priamost"},
+   {t:"„Dobrý deň. Videl som váš životopis. Nechcem vám nič sľubovať — chcem sa stretnúť a povedať si to na rovinu.“",v:4,tech:"priamost"}],
+  namietky:[
+   {t:"„A to je akože MLM? Lebo do pyramídy nejdem.“",o:[
+    {t:"„Rozumiem tej otázke a je namieste. Poviem vám presne, ako sa tu zarába, a rozhodnete sa sám.“",v:4,tech:"priamost"},
+    {t:"„Zarába sa z provízií od poisťovní, nie z toho, koho privediete.“",v:3,tech:"ram"},
+    {t:"„Chápem, veľa ľudí má s tým zlú skúsenosť.“",v:2,tech:"oznacenie"},
+    {t:"„To je hlúposť, ktorú si vymysleli závistlivci.“",v:-3,tech:"chyba"}]},
+   {t:"„A koľko sa u vás dá reálne zarobiť?“",o:[
+    {t:"„Prvé mesiace pravdepodobne nič alebo málo. Potom to závisí od vás — a čísla vám ukážem.“",v:4,tech:"priamost"},
+    {t:"„Priemer vám nepoviem, lebo je zavádzajúci. Poviem vám, čo zarábam ja a prečo.“",v:3,tech:"ram"},
+    {t:"„Koľko potrebujete zarábať, aby to pre vás malo zmysel?“",v:3,tech:"otazka"},
+    {t:"„Tu sa dá zarobiť koľko chcete, strop neexistuje.“",v:-4,tech:"chyba"}]},
+   {t:"„Ja mám stálu prácu a plat. Prečo by som to menil?“",o:[
+    {t:"„Možno by ste nemali. Práve preto sa chcem stretnúť — aby ste vedeli, do čoho by ste išli.“",v:4,tech:"ustup"},
+    {t:"„Dá sa to skúsiť aj popri práci, kým to nezačne dávať zmysel.“",v:3,tech:"ram"},
+    {t:"„Čo by sa muselo stať, aby ste o zmene uvažovali?“",v:3,tech:"otazka"},
+    {t:"„Za pár mesiacov budete zarábať trikrát toľko.“",v:-4,tech:"chyba"}]},
+   {t:"„Nemám v tom žiadne vzdelanie ani skúsenosti.“",o:[
+    {t:"„Ani ja som ich nemal. Skúšku aj zaškolenie prejdete, to sa dá naučiť.“",v:4,tech:"priamost"},
+    {t:"„Podstatné je, či viete hovoriť s ľuďmi. Zvyšok sú vedomosti.“",v:3,tech:"ram"},
+    {t:"„To je normálna obava, väčšina ju má.“",v:2,tech:"oznacenie"},
+    {t:"„Vzdelanie tu nikto nepotrebuje.“",v:-2,tech:"tlak"}]},
+   {t:"„A budem musieť volať ľuďom a otravovať ich?“",o:[
+    {t:"„Áno, budete. Nezakrývam to — je to najťažšia časť tejto práce.“",v:4,tech:"priamost"},
+    {t:"„Časť klientov príde z odporúčaní. Ale začínať sa musí telefónom.“",v:3,tech:"ram"},
+    {t:"„Chápem, mne sa do toho na začiatku tiež nechcelo.“",v:2,tech:"oznacenie"},
+    {t:"„Vôbec nie, klienti si vás nájdu sami.“",v:-4,tech:"chyba"}]}]},
+
  {id:"studene", nm:"Studené kontakty", ik:"❄",
   popis:"Čísla bez histórie. Nikto tam na teba nečaká.",
   kvalita:0, zasoba:null, odomkne:{lvl:1,rep:0},
@@ -1360,6 +1419,7 @@ function segmentOdomknuty(s){
  return true;
 }
 function zasobaSegmentu(id){
+ if(id==="spolupracovnik")return (typeof S.uchadzaci==="number")?S.uchadzaci:0;
  const s=segment(id);
  if(s.zasoba===null)return null;                 /* studené sú nekonečné */
  if(!S.crmZasoba)S.crmZasoba={};
@@ -1370,6 +1430,7 @@ function dopnZasoby(){
  S.crmZasoba=S.crmZasoba||{};
  SEGMENTY.forEach(s=>{
   if(s.zasoba===null)return;
+  if(s.id==="spolupracovnik")return;   /* uchádzači prichádzajú z inzerátu, nie sami */
   if(s.dopln!==undefined){                       /* okruh známych sa obnovuje len pomaly */
    const teraz=S.crmZasoba[s.id]===undefined?s.zasoba:S.crmZasoba[s.id];
    S.crmZasoba[s.id]=Math.min(s.zasoba,teraz+s.dopln);
@@ -1377,6 +1438,7 @@ function dopnZasoby(){
  });
 }
 function minZasobu(id){
+ if(id==="spolupracovnik"){S.uchadzaci=Math.max(0,(S.uchadzaci||0)-1);return}
  const s=segment(id); if(s.zasoba===null)return;
  S.crmZasoba=S.crmZasoba||{};
  if(S.crmZasoba[id]===undefined)S.crmZasoba[id]=s.zasoba;
@@ -1885,11 +1947,11 @@ const FAZY=["RÁNO · Kancelária","POOBEDIE · Terén","VEČER · Rozvoj"];
 let S={}, CRM=null, M=null, EX=null, SC=null;
 
 const VERZIA=3;                 /* verzia formátu uloženej pozície */
-const HRA="0.9.3";              /* verzia hry — zobrazuje sa v rozhraní */
+const HRA="0.9.5";              /* verzia hry — zobrazuje sa v rozhraní */
 /* Otlačok konkrétneho zostavenia. Dopĺňa sa pri skladaní súboru, takže dve
    rôzne zostavenia tej istej verzie sa dajú od seba rozoznať. Keď tester hlási
    chybu, stačí porovnať tento reťazec. */
-const BUILD="2026-08-07-557c3c";
+const BUILD="2026-08-10-7d113b";
 function prazdnyStav(){return {
  v:VERZIA, scr:"phone", view:"domov",
  meno:"", priez:"", rok:1996, pohl:"m", hair:0, beard:0, skin:0, hairCol:0, okuliare:false,
@@ -1900,7 +1962,8 @@ function prazdnyStav(){return {
  vztahy:{}, znami:[],
  klFilter:"vsetci", klStrana:0, vikendHotovy:false, crmZasoba:{}, crmSeg:"studene", volalDnes:false,
  gamba:0, kasBilancia:0, kasNavstev:0, videnaVerzia:HRA,
- majetok:null, nakupKat:null, tikety:[], zapasy:[], zapasyDen:"", kripto:null,
+ majetok:null, nakupKat:null,
+ tim:[], uchadzaci:0, inzerat:null, inzeratKvalita:0, strukturaOtv:false, tikety:[], zapasy:[], zapasyDen:"", kripto:null,
  povysenie:null, unMinulyMesiac:0,
  tabula:[], tabulaId:0, tabulaMesiac:0, tabRezim:"aktualny",
  buff:{enZajtra:0, trpDnes:0}, nezdrave:0, energakov:0,
@@ -1950,6 +2013,7 @@ function omladObsah(st){
  st.crmZasoba=st.crmZasoba||{};
  SEGMENTY.forEach(function(s){
   if(s.zasoba===null)return;
+  if(s.id==="spolupracovnik")return;   /* riadi ich zaplatený inzerát, nie uzávierka */
   if(st.crmZasoba[s.id]===undefined){st.crmZasoba[s.id]=s.zasoba;sprava.segmenty++}
  });
  /* 3 · tabuľa pobočky */
@@ -2227,13 +2291,18 @@ function genClient(segId){
  const k={
   id:S.nextId++, meno:pohl==="m"?rnd(MM):rnd(MZ), priez:rnd(PR), pohl, vek, mesto:rnd(MESTA),
   persona:per.id, nar, need, obavy, draw, qvar, riesene:{}, znama:[],
-  prijem:rnd(["do 900 €","900 – 1 400 €","1 400 – 2 200 €","nad 2 200 €"]),
+  prijemEur:0, prijem:"",
   rodina:rnd(["slobodný/á","partner, bez detí","dve deti","tri deti","dospelé deti"]),
   uvery:need==="byvanie"?"rieši hypotéku":(need==="ochrana"?"spláca hypotéku":"bez úverov"),
   riziko:need==="investicia"?"toleruje výkyvy":"chce istotu",
   stav:"lead", dov:0, zmluvy:[], pozn:[], vznik:{m:S.mesiac,d:S.den},
   seg:seg?seg.id:"studene"
  };
+ /* Príjem: väčšina okolo skromného stredu, časť výrazne vyššie —
+    tak, aby v databáze naozaj bol niekto, komu sa dá nastaviť veľká zmluva. */
+ k.prijemEur=Math.round((580+Math.random()*1250+
+   (Math.random()<0.16?Math.random()*2600:0))/10)*10;
+ k.prijem=pasmoPrijmu(k.prijemEur);
  S.klienti[k.id]=k; return k;
 }
 const KL=id=>S.klienti[id];
@@ -2499,7 +2568,7 @@ function porovnajZostavenie(hra,build){
 
 const CLOUD={
  url:"https://sbnecvrkjniniamqwmls.supabase.co",
- anon:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNibmVjdnJram5pbmlhbXF3bWxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTc1NTIsImV4cCI6MjEwMTU5MzU1Mn0.mfu7VGRqnzy8ZMNIl6uCgZF42ECihKqo0IojupUiXtM",
+ anon:"sb_publishable_EcI8-UDI_Tb0ZSsryaWNUQ_HZKSe-pf",
  tabulka:"savy"
 };
 const CLOUD_KLUC="provizia:cloud";
@@ -2817,6 +2886,127 @@ function nazovAtrib(k){
  const n=(typeof ATTRS!=="undefined")&&ATTRS.find(function(a){return a[0]===k});
  return n?n[1]:k;
 }
+
+/* ===================== ŠTRUKTÚRA =====================
+   Od štvrtej úrovne prestávaš byť len ten, kto predáva. Môžeš si postaviť
+   vlastný tím — a z toho, čo zarobia oni, ti patrí podiel.
+
+   Cesta je rovnaká ako pri klientoch: zaplatíš inzerát, prídu uchádzači,
+   navoláš im a na stretnutí ich buď získaš alebo nie. Rozdiel je v tom,
+   že spolupracovník ti potom prináša peniaze každý mesiac — kým neodíde. */
+
+const LVL_STRUKTURA=4;                 /* od tejto úrovne sa dá naberať */
+const strukturaOdomknuta=function(){ return S.lvl>=LVL_STRUKTURA };
+
+/* ---------- inzeráty ---------- */
+const INZERATY=[
+ {id:"i_zakladny", nm:"Základný inzerát", cena:150, dni:12, min:3, max:5, kvalita:0,
+  popis:"Riadkový inzerát medzi stovkami ďalších. Ozvú sa ti hlavne tí, čo hľadajú čokoľvek."},
+ {id:"i_zvyrazneny", nm:"Zvýraznený inzerát", cena:450, dni:12, min:5, max:8, kvalita:1,
+  popis:"Vyskočí vyššie a má logo. Chodia lepší ľudia a je ich viac."},
+ {id:"i_topka", nm:"Top pozícia na mesiac", cena:1100, dni:12, min:8, max:12, kvalita:2,
+  popis:"Prvé miesto vo výsledkoch. Drahé, ale uchádzači vedia, kam idú, a menej ich odpadne."}
+];
+const inzeratPolozka=id=>INZERATY.find(i=>i.id===id);
+
+/* ---------- stav tímu ---------- */
+function strukturaStav(){
+ if(!Array.isArray(S.tim))S.tim=[];
+ if(!isFinite(S.uchadzaci))S.uchadzaci=0;
+ if(!S.inzerat||typeof S.inzerat!=="object")S.inzerat=null;
+ return S.tim;
+}
+/* Podiel z provízií tímu rastie s tvojou úrovňou. */
+function podielZTimu(){
+ if(S.lvl<LVL_STRUKTURA)return 0;
+ return Math.min(0.28, 0.10+(S.lvl-LVL_STRUKTURA)*0.03);
+}
+function kupInzerat(id){
+ const i=inzeratPolozka(id);
+ if(!i)return {ok:false,t:"Taký inzerát neexistuje."};
+ if(!strukturaOdomknuta())return {ok:false,t:"Naberať sa dá až od úrovne "+LVL_STRUKTURA+"."};
+ if(S.money<i.cena)return {ok:false,t:"Na to nemáš."};
+ strukturaStav();
+ zaplat(i.cena);
+ const pocet=i.min+Math.floor(Math.random()*(i.max-i.min+1));
+ S.uchadzaci+=pocet;
+ S.inzeratKvalita=i.kvalita;
+ S.inzerat={id:i.id, doDna:absDen(S.mesiac,S.den)+i.dni, pocet:pocet};
+ logg(`Inzerát na práca.sk zaplatený. Ozvalo sa ${pocet} ${pocet===1?"uchádzač":pocet<5?"uchádzači":"uchádzačov"}.`,"gold");
+ return {ok:true,t:"Ozvalo sa "+pocet+" ľudí. Nájdeš ich vo Volaní pod Spolupracovníkmi."};
+}
+/* Uchádzač, ktorého sa nepodarilo osloviť, časom stratí záujem. */
+function inzeratExpiruje(){
+ if(!S.inzerat)return;
+ if(absDen(S.mesiac,S.den)>S.inzerat.doDna){
+  if(S.uchadzaci>0){
+   logg(`Inzerát dobehol. ${S.uchadzaci} ${S.uchadzaci===1?"uchádzač si našiel"
+     :"uchádzačov si našlo"} inú prácu.`,"dim");
+   S.uchadzaci=0;
+  }
+  S.inzerat=null;
+ }
+}
+
+/* ---------- prijatie do tímu ---------- */
+function prijmiDoTimu(k){
+ strukturaStav();
+ const clen={
+  id:k.id, meno:k.meno, priez:k.priez, pohl:k.pohl, mesto:k.mesto,
+  /* schopnosť určuje, koľko dokáže mesačne vyprodukovať */
+  schopnost:Math.max(1,Math.min(5,1+Math.floor(Math.random()*3)+(S.inzeratKvalita||0))),
+  vernost:55+Math.floor(Math.random()*25),
+  odkedy:{m:S.mesiac,d:S.den},
+  unSpolu:0, mesiacov:0, stav:"nový"
+ };
+ S.tim.push(clen);
+ k.stav="klient";                      /* v databáze zostáva ako človek, ktorého poznáš */
+ k.pozn.push("Nastúpil do tvojho tímu "+S.mesiac+"/"+S.den+".");
+ logg(celeMeno(k)+" nastúpil do tvojho tímu.","green");
+ return clen;
+}
+/* Koľko člen vyprodukuje za mesiac. Prvý mesiac takmer nič — učí sa. */
+function vykonClena(c){
+ const rozbeh=Math.min(1, 0.25+c.mesiacov*0.3);
+ const zaklad=18+c.schopnost*22;
+ const nahoda=0.7+Math.random()*0.6;
+ return Math.max(0, Math.round(zaklad*rozbeh*nahoda));
+}
+/* Mesačná uzávierka tímu — vracia prehľad na vypísanie. */
+function uzavierkaTimu(){
+ strukturaStav();
+ const podiel=podielZTimu();
+ const sprava={un:0, eur:0, odchody:[], podiel:podiel, clenov:S.tim.length};
+ if(!S.tim.length||podiel<=0)return sprava;
+ const zostali=[];
+ S.tim.forEach(function(c){
+  c.mesiacov++;
+  const un=vykonClena(c);
+  c.unSpolu+=un;
+  sprava.un+=un;
+  /* kto nezarába, stráca chuť; kto zarába, drží sa */
+  c.vernost+=(un>40?4:-9)+(bonusRoman?0:0);
+  if(S.pohoda>60)c.vernost+=2;
+  c.vernost=Math.max(0,Math.min(100,c.vernost));
+  c.stav=c.vernost>=55?"darí sa mu":(c.vernost>=30?"váha":"chce skončiť");
+  if(c.vernost<=8&&c.mesiacov>=2){ sprava.odchody.push(c); return }
+  zostali.push(c);
+ });
+ S.tim=zostali;
+ const hrube=sprava.un*UN_RATE[S.lvl]*podiel;
+ sprava.eur=Math.round(hrube*(1-TAX)*100)/100;
+ if(sprava.un){
+  S.unMonth+=Math.round(sprava.un*podiel);
+  S.unTotal+=Math.round(sprava.un*podiel);
+ }
+ return sprava;
+}
+const timovyPrehlad=function(){
+ strukturaStav();
+ return {clenov:S.tim.length,
+   un:S.tim.reduce(function(a,c){return a+c.unSpolu},0),
+   podiel:podielZTimu()};
+};
 
 /* ===================== KASÍNO =====================
    Nepravidelný príjem, hotovosť v ruke a stres. Pre túto profesiu je to
@@ -3363,8 +3553,9 @@ function hlavicka(){
 function scrGame(){
  app.innerHTML=`<div class="telefon">${stavovyRiadok()}${profilKarta()}<div id="body"></div></div>`+paticka();
  paintFace("pf",cfgOf(),4);
- const V={domov:vDomov,akcie:vAkcie,klienti:vKlienti,kalendar:vKalendar,tabula:vTabula,
+ const V={domov:vDomov,akcie:vAkcie,klienti:vKlienti,kalendar:vKalendar,
    potreby:vPotreby,obchod:vPotreby,menu:vMenu,crm:crmVyber,kasino:vKasino,zaloha:vZaloha,
+   tabula:function(){ S.strukturaOtv?vStruktura():vTabula() },
    nakupy:function(){ S.nakupKat?vNakupyKat():vNakupy() }};
  (V[S.view]||vDomov)();
 }
@@ -3762,6 +3953,63 @@ function vKalendar(){
 
 /* --- Tabuľa --- */
 const TAB_REZIMY=[["aktualny","Tento mesiac"],["minuly","Minulý mesiac"],["historia","Od nástupu"]];
+/* ---------- štruktúra ---------- */
+function vStruktura(){
+ strukturaStav();
+ const p=timovyPrehlad();
+ let h=`<div class="appbar">
+   <button class="spat" onclick="S.strukturaOtv=false;render()">‹</button>
+   <span class="nadpis">Štruktúra</span></div>
+  <p class="podnadpis appsub">Vlastný tím. Z toho, čo zarobia oni, ti patrí podiel.</p>
+  <div class="panel">`;
+ if(!strukturaOdomknuta()){
+  h+=`<div class="karta pozor mala">Naberať ľudí môžeš až od úrovne ${LVL_STRUKTURA}.
+   Teraz máš úroveň ${S.lvl}.</div></div>`;
+  setBody(h); return;
+ }
+ h+=`<div class="panel2 mala">V tíme <b>${p.clenov}</b> ${p.clenov===1?"človek":"ľudí"}
+  · tvoj podiel z ich provízií <b class="money-t">${Math.round(p.podiel*100)} %</b>
+  ${p.un?`<br>Spolu ti priniesli <b class="un-t">${p.un} UN</b>`:""}</div>`;
+
+ h+=`<h3>Nábor</h3>`;
+ const cakaju=zasobaSegmentu("spolupracovnik");
+ if(cakaju>0){
+  h+=`<div class="karta zvyraz mala">Na inzerát sa ozvalo <b>${cakaju}</b> ${
+   cakaju===1?"uchádzač":cakaju<5?"uchádzači":"uchádzačov"}.
+   Nájdeš ich vo Volaní pod <b>Spolupracovníkmi</b>.
+   ${S.inzerat?`<br><span class="dim">Inzerát beží ešte ${Math.max(0,S.inzerat.doDna-absDen(S.mesiac,S.den))} dní.</span>`:""}</div>`;
+ } else {
+  h+=`<div class="karta mala"><span class="dim">Zatiaľ sa nikto neozval.
+   Zaplať inzerát a uchádzači sa objavia vo Volaní.</span></div>`;
+ }
+ INZERATY.forEach(function(i){
+  h+=`<button ${S.money<i.cena?"disabled":""} data-tip="${i.popis}"
+   onclick="kupInzeratKlik('${i.id}')">📰 <b>${i.nm}</b>
+   <span class="money-t">· ${i.cena} €</span>
+   <span class="dim mala"><br>${i.min}–${i.max} uchádzačov · beží ${i.dni} dní</span> ${tipZnak}</button>`;
+ });
+
+ h+=`<h3>Tvoji ľudia</h3>`;
+ if(!p.clenov){
+  h+=`<div class="karta mala"><span class="dim">Zatiaľ nikoho nemáš.</span></div>`;
+ }
+ S.tim.forEach(function(c){
+  const far=c.vernost>=55?"dobre":(c.vernost>=30?"pozor":"zle");
+  h+=`<div class="karta ${far} mala"><b>${c.meno} ${c.priez}</b>
+   <span class="dim">· ${c.mesto} · ${c.mesiacov} ${c.mesiacov===1?"mesiac":"mes."} v tíme</span>
+   <br>Prinesol <b class="un-t">${c.unSpolu} UN</b> ·
+   <span class="${far==="dobre"?"green":far==="pozor"?"gold":"red"}">${c.stav}</span>
+   <span class="bar" style="margin-top:5px"><i class="${
+     c.vernost>=55?"greenb":c.vernost>=30?"goldb":"redb"}" style="width:${c.vernost}%"></i></span></div>`;
+ });
+ h+=`</div>`;
+ setBody(h);
+}
+function kupInzeratKlik(id){
+ const r=kupInzerat(id);
+ r.ok?sCash():sBad();
+ render();
+}
 function vTabula(){
  if(!Array.isArray(S.tabula)||!S.tabula.length)S.tabula=generujTabulu();
  const rez=S.tabRezim||"aktualny";
@@ -3776,6 +4024,12 @@ function vTabula(){
   <div class="panel2" style="font-size:11px">Tvoje miesto: <b class="money-t">${ja._por}. z ${riadky.length}</b>
    · úroveň <b>${S.lvl}</b> ${LVL_NAME[S.lvl]||""} · ${rez==="historia"?"celkovo":"tento mesiac"} <b>${ja[kluc]} UN</b></div>
   ${postupPanel()}
+  <button data-tip="Vlastný tím. Zaplatíš inzerát na práca.sk, uchádzači sa objavia vo Volaní a z ich provízií ti potom patrí podiel."
+   onclick="S.strukturaOtv=true;render()">🤝 <b>Štruktúra</b>
+   <span class="dim mala"><br>${strukturaOdomknuta()
+     ? ((timovyPrehlad().clenov||0)+" v tíme"+(zasobaSegmentu("spolupracovnik")
+        ? " · "+zasobaSegmentu("spolupracovnik")+" uchádzačov čaká" : ""))
+     : "otvorí sa na úrovni "+LVL_STRUKTURA}</span> ${tipZnak}</button>
   <div class="tab">
    <div class="tr th"><span>#</span><span>Meno</span><span>Úr.</span><span>UN</span></div>`;
  riadky.forEach(r=>{
@@ -4392,6 +4646,15 @@ const tipZnak='<span class="tipik">ⓘ</span>';
    hra mu ukáže všetko, čo medzitým pribudlo.                              */
 
 const NOVINKY=[
+ {v:"0.9.5", nm:"Štruktúra a nábor", body:[
+  "Od štvrtej úrovne si môžeš postaviť vlastný tím — vo Firme pribudla Štruktúra.",
+  "Zaplatíš inzerát na práca.sk a uchádzači sa objavia vo Volaní pod Spolupracovníkmi.",
+  "Nábor má vlastné rozhovory — o práci, nie o produktoch. Vrátane otázky, či to nie je MLM.",
+  "Z provízií tvojich ľudí ti patrí podiel, ktorý rastie s úrovňou. Kto nezarába, časom odíde."]},
+ {v:"0.9.4", nm:"Zmluvy podľa príjmu", body:[
+  "Výška životného poistenia, hypotéky aj spotrebného úveru sa teraz odvíja od príjmu klienta.",
+  "Kto zarába viac, dosiahne na väčšiu zmluvu — pri hypotéke výraznejšie než pri poistení.",
+  "Ostatné produkty (PZP, dôchodkové, fondy, havarijné) sa príjmom nemenia."]},
  {v:"0.9.3", nm:"Na čo míňať peniaze", body:[
   "Pribudla aplikácia Nákupy — oblečenie, auto, bývanie a kurzy.",
   "Každá vec sa prejaví na atribútoch. Lacné riešenia niečo dajú a niečo vezmú.",
@@ -5462,7 +5725,9 @@ function crmPytajTermin(){
 }
 function crmTermin(m,d){const c=CRM;if(!c||!c.cl)return;
  pridajStres(-0.8);pridajPohodu(1);
- pridajTermin(c.cl.id,m,d,"stretnutie"); c.cl.stav="lead"; c.booked++;
+ const nabor=(c.seg==="spolupracovnik");
+ pridajTermin(c.cl.id,m,d,nabor?"nabor":"stretnutie"); c.cl.stav="lead"; c.booked++;
+ if(nabor)c.cl.uchadzac=true;
  if(S.lvl===1&&c.mode==="studeny"){S.tips++;checkLevel()}
  if(c.mode==="znovu"){c.cl.opakovane=(c.cl.opakovane||0)+1;
   logg(`${celeMeno(c.cl)} súhlasil s ďalším stretnutím (${m}/${d}).`,"green")}
@@ -5547,9 +5812,10 @@ function meetStart(kid){
  const k=KL(kid); if(!k)return; opravKlienta(k);
  S.energia--; ev.done=true;
  if(ev.typ==="servis"){servis(k,ev);return}
+ const nabor=(ev.typ==="nabor");
  M={kid, ev, roz:novyRozhovorStretnutie(k), faza:"uvod", akt:null, pokus:0,
     hotovo:[], spalene:[], tlak:0, poslednyTah:null, poslednySignal:null, produkt:null,
-    podpisane:[], odmietnutyDopredaj:0, vysledokObavy:null};
+    podpisane:[], odmietnutyDopredaj:0, vysledokObavy:null, nabor:nabor};
  M.dov=M.roz.dovera; M.trp=M.roz.trp;
  meetDraw();
 }
@@ -5655,21 +5921,35 @@ function meetDraw(){
   }else{
    if(viaz.length){
     b+=`<h3 style="margin-top:6px">Čo s tým súvisí</h3>`;
-    viaz.forEach(z=>{const s=sancaDopredaja(M.roz,k,z,poradie);
-     b+=`<button onclick="dopredaj('${z.p.id}')">${z.p.nm} <span class="un-t">${z.p.un} UN</span>
+    viaz.forEach(z=>{const s=sancaDopredaja(M.roz,k,z,poradie); const un=unPreKlienta(z.p,k);
+     b+=`<button onclick="dopredaj('${z.p.id}')">${z.p.nm} <span class="un-t">${un} UN</span>
       <span class="dim mala"><br>${z.d}<br>šanca ${Math.round(s*100)} % · ${
-      Math.round(z.p.un*UN_RATE[S.lvl]*(1-TAX)*(S.lvl===1?.28:1))} € čistého</span></button>`});
+      Math.round(un*UN_RATE[S.lvl]*(1-TAX)*(S.lvl===1?.28:1))} € čistého</span></button>`});
    }else b+=`<div class="karta mala"><span class="dim">Na to, čo podpísal, sa nič prirodzene nenaväzuje.</span></div>`;
    if(ostatne.length){
     b+=`<h3>Skúsiť niečo ďalšie</h3>
      <p class="podnadpis">Bez súvislosti to klient vníma ako obchodovanie. Stojí to dôveru.</p>`;
-    ostatne.slice(0,3).forEach(z=>{const s=sancaDopredaja(M.roz,k,z,poradie);
-     b+=`<button onclick="dopredaj('${z.p.id}')">${z.p.nm} <span class="un-t">${z.p.un} UN</span>
+    ostatne.slice(0,3).forEach(z=>{const s=sancaDopredaja(M.roz,k,z,poradie); const un=unPreKlienta(z.p,k);
+     b+=`<button onclick="dopredaj('${z.p.id}')">${z.p.nm} <span class="un-t">${un} UN</span>
       <span class="dim mala"><br>šanca ${Math.round(s*100)} % · <span class="red">−dôvera</span></span></button>`});
    }
   }
   b+=`<hr><button class="btn-go" onclick="ukonciStretnutie()">Poďakovať a ukončiť →</button>`;
   x.innerHTML=b;return}
+
+ /* náborové stretnutie: namiesto produktu ponúkaš prácu */
+ if(M.faza==="close"&&M.nabor){
+  const s=sancaNaNabor(M.roz,k,zost.length);
+  x.innerHTML=meracStretnutie(k)+
+   `<h3>Ponúkneš mu spoluprácu?</h3>
+    ${zost.length?`<div class="karta zle mala"><span class="red">Ešte ${zost.length} nevyriešených otázok.</span>
+      Kto nastúpi s pochybnosťami, do dvoch mesiacov odíde.</div>`:""}
+    <div class="karta ${s>=0.6?"dobre":s>=0.35?"pozor":"zle"} mala">
+     Šanca, že to vezme: <b>${Math.round(s*100)} %</b><br>
+     <span class="dim">Z toho, čo zarobí, ti bude patriť ${Math.round(podielZTimu()*100)} %.</span></div>
+    <button class="btn-go" onclick="ponukniSpolupracu()">🤝 Ponúknuť spoluprácu</button>
+    <button onclick="M.faza='rozhovor';meetDraw()">← Späť k rozhovoru</button>`;
+  return}
 
  if(M.faza==="close"){
   const av=PRODUCTS.filter(pp=>A("odb")>=pp.minOdb);
@@ -5679,9 +5959,10 @@ function meetDraw(){
     ${zost.length?`<div class="karta zle mala"><span class="red">Ešte ${zost.length} nevyriešených námietok.</span> Každá zráža šancu.</div>`:""}
     ${vieNeed?`<div class="karta dobre mala"><span class="green">Vieš, čo potrebuje:</span> ${NEEDS[k.need]}.</div>`
      :`<div class="karta pozor mala"><span class="gold">Nezistil si, čo naozaj potrebuje.</span> Odporúčanie bude tipovanie.</div>`}
-    ${av.map(pp=>{const s=sancaNaPodpis(r,k,pp,zost.length);
-     return `<button onclick="closeDeal('${pp.id}')">${pp.nm} <span class="un-t">${pp.un} UN</span>
-      <span class="dim mala"><br>${Math.round(pp.un*UN_RATE[S.lvl]*(1-TAX)*(S.lvl===1?.28:1))} € čistého · šanca ${Math.round(s*100)} %</span></button>`}).join("")}
+    ${av.map(pp=>{const s=sancaNaPodpis(r,k,pp,zost.length); const un=unPreKlienta(pp,k);
+     return `<button onclick="closeDeal('${pp.id}')">${pp.nm} <span class="un-t">${un} UN</span>
+      <span class="dim mala"><br>${Math.round(un*UN_RATE[S.lvl]*(1-TAX)*(S.lvl===1?.28:1))} € čistého · šanca ${Math.round(s*100)} %${
+      PRIJEM_CITLIVOST[pp.id]?` · <span class="dim">podľa príjmu</span>`:""}</span></button>`}).join("")}
     <button onclick="M.faza='rozhovor';meetDraw()">← Späť k rozhovoru</button>`;
   return}
 
@@ -5821,6 +6102,45 @@ function druhyTermin(id,m,d){const k=KL(id);if(!k)return;
 function odlozKlienta(id){const k=KL(id);if(!k)return;
  k.stav="odmietol";k.odmietnutyDna={m:S.mesiac,d:S.den};
  logg(`${celeMeno(k)} zostáva v databáze na neskôr.`,"dim");render()}
+/* Rozhoduje to isté, čo pri zmluve — pripravenosť, nevyriešené otázky
+   a to, ako na teba pôsobí ako na budúceho vedúceho. */
+function sancaNaNabor(r,k,nevyriesene){
+ const pr=pripravenost(r);
+ const nam=Math.max(0.25,1-(nevyriesene||0)*0.2);
+ const povest=0.75+Math.min(0.25,S.rep/400);
+ return Math.max(0,Math.min(0.95,Math.pow(pr,1.5)*1.9*nam*povest));
+}
+function ponukniSpolupracu(){
+ if(!M)return;
+ const k=KL(M.kid); if(!k)return;
+ const zost=k.obavy.filter(function(o){return M.hotovo.indexOf(o)<0}).length+(M.spalene||[]).length;
+ const s=sancaNaNabor(M.roz,k,zost);
+ if(Math.random()>=s){
+  k.pozn.push("Ponuku spolupráce odmietol.");
+  k.stav="odmietol"; k.odmietnutyDna={m:S.mesiac,d:S.den};
+  pridajStres(2);
+  const meno=celeMeno(k);
+  M=null;
+  app.innerHTML=hud()+`<div class="panel"><h2>Neprijal</h2>
+   <p style="margin:8px 0"><b>${meno}:</b> „Ďakujem za čas, ale nie je to pre mňa.“</p>
+   <div class="karta mala">Zostáva v databáze. O čase sa mu dá ozvať znova.</div>
+   <button class="btn-go" onclick="render()">Pokračovať →</button></div>`;
+  sBad(); return;
+ }
+ const clen=prijmiDoTimu(k);
+ pridajPohodu(5); pridajStres(-2); pridajRep(2);
+ if(M&&M.ev)M.ev.vysl="nábor";
+ M=null;
+ app.innerHTML=hud()+`<div class="panel center"><h2>Máš nového spolupracovníka</h2>
+  <div class="ticker">${clen.meno} ${clen.priez}</div>
+  <p class="dim mala">${clen.mesto} · nastupuje ${S.mesiac}/${S.den}</p>
+  <div class="karta zvyraz" style="text-align:left">
+   Z jeho provízií ti bude patriť <b class="money-t">${Math.round(podielZTimu()*100)} %</b>.
+   <br><span class="mala dim">Prvý mesiac sa učí a prinesie málo. Ak sa mu nebude dariť,
+   časom odíde — nájdeš ho vo Firme pod Štruktúrou.</span></div>
+  <button class="btn-go" style="margin-top:10px" onclick="render()">Pokračovať →</button></div>`;
+ sCash(); autosave();
+}
 function closeDeal(pid){
  if(!M)return; const p=PRODUCTS.find(x=>x.id===pid); if(!p)return;
  const k=KL(M.kid); if(!k)return;
@@ -5853,7 +6173,7 @@ function dokonciZmluvu(k,p,zost,odp,prepis,uzRozhodnute){
   }
   meetVysledok(k,"bezpodpisu");return}
  const fit=(p.need===k.need);
- const podiel=S.lvl===1?0.28:1, un=Math.max(1,Math.round(p.un*podiel));
+ const podiel=S.lvl===1?0.28:1, un=Math.max(1,Math.round(unPreKlienta(p,k)*podiel));
  S.unMonth+=un;S.unTotal+=un;S.papiere++;checkLevel();
  if(!Array.isArray(S.papiereZoz))S.papiereZoz=[];
  S.papiereZoz.push(`${p.nm} — ${celeMeno(k)} (${S.mesiac}/${S.den})`);
@@ -6087,6 +6407,8 @@ function endMonth(){
  S.maxE=maxEnergia();
  const lvlUp=checkLevel();
  const spravy=obnovTabulu();
+ const tim=(typeof uzavierkaTimu==="function")?uzavierkaTimu():null;
+ if(typeof inzeratExpiruje==="function")inzeratExpiruje();
  dopnZasoby();
  if(typeof cloudTichaZaloha==="function")cloudTichaZaloha();
  /* daňové priznanie prichádza každý rok — teda každých dvanásť mesiacov */
@@ -6111,6 +6433,11 @@ function endMonth(){
     <b class="money-t">Podmienky na úroveň ${S.povysenie.na} SPLNENÉ</b><br>
     <span style="font-size:11px">${LVL_NAME[S.povysenie.na]||""} · schválenie o ${dniDoPovysenia()} ${dniDoPovysenia()===1?"deň":"dní"}${S.povysenie.zdrzanie?" (Roman to nikam neponáhľa)":""}</span></div>`:""}
   ${S.povysenie&&!lvlUp?`<div class="panel2 center" style="font-size:11px">Povýšenie na úroveň ${S.povysenie.na} — zostáva ${dniDoPovysenia()} dní.</div>`:""}
+  ${tim&&tim.clenov?`<div class="panel2"><span class="gold">Tvoj tím (${tim.clenov}):</span>
+   <b class="un-t">${tim.un} UN</b> · tvoj podiel ${Math.round(tim.podiel*100)} % =
+   <b class="money-t">+${tim.eur.toFixed(2)} €</b>
+   ${tim.odchody.length?`<br><span class="red">Skončili: ${tim.odchody.map(function(c){
+     return c.meno+" "+c.priez}).join(", ")}</span>`:""}</div>`:""}
   <div class="panel2" style="font-size:11px"><span class="gold">Tabuľa:</span>
    ${spravy.povysenia.length?`povýšení ${spravy.povysenia.length}`:"nikoho nepovýšili"} ·
    odišlo ${spravy.odchody.length} · prišlo ${spravy.prichody.length}
